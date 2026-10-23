@@ -45,7 +45,7 @@ class Instrument:  # not "Test*": pytest would try to collect it
 
 def read_info(folder: Path) -> dict | None:
     try:
-        data = json.loads((folder / INFO_FILE).read_text(encoding="utf-8"))
+        data = json.loads((folder / INFO_FILE).read_text(encoding="utf-8-sig"))
     except (OSError, ValueError):
         return None
     return data if isinstance(data, dict) else None
@@ -72,9 +72,10 @@ def _scan_test(folder: Path, domain: str) -> Instrument:
     info = read_info(folder)
     inst = Instrument(folder=folder, domain=domain, name=folder.name, has_info=info is not None)
     if info:
-        inst.name = info.get("name") or folder.name
-        inst.reference = info.get("reference") or ""
-        inst.subdomain = info.get("subdomain") or ""
+        text = lambda k: v if isinstance(v := info.get(k), str) else ""  # non-strings = absent
+        inst.name = text("name") or folder.name
+        inst.reference = text("reference")
+        inst.subdomain = text("subdomain")
     for f in sorted(folder.iterdir(), key=lambda p: p.name):
         if (not f.is_file() or f.name.startswith((".", "~$")) or f.name == INFO_FILE):
             continue

@@ -113,3 +113,19 @@ def test_write_info_roundtrip(make_lib):
     write_info(folder, "Rappel é/ü", "Réf. 2004", "Épisodique")
     assert read_info(folder) == {"name": "Rappel é/ü", "reference": "Réf. 2004", "subdomain": "Épisodique"}
     assert "Rappel é/ü" in (folder / "psyset.json").read_text(encoding="utf-8")
+
+
+def test_info_non_string_values_ignored(make_lib):
+    root = make_lib({"Exec": {"a": ["test.pdf"], "b": ["test.pdf"]}})
+    (root / "Exec" / "a" / "psyset.json").write_text(
+        json.dumps({"name": 16, "reference": ["x"], "subdomain": 3}), encoding="utf-8")
+    a, b = scan_library(root)
+    assert (a.name, a.reference, a.subdomain, a.has_info) == ("a", "", "", True)
+
+
+def test_info_with_bom(make_lib):
+    root = make_lib({"Exec": {"a": ["test.pdf"]}})
+    (root / "Exec" / "a" / "psyset.json").write_bytes(
+        b"\xef\xbb\xbf" + json.dumps({"name": "Z", "subdomain": "S"}).encode())
+    t = one(root)
+    assert (t.name, t.subdomain, t.has_info) == ("Z", "S", True)
