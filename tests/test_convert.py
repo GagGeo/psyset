@@ -120,3 +120,23 @@ def test_no_converter(tmp_path, monkeypatch):
     with pytest.raises(NoConverter):
         generate({tmp_path / "a.pdf": [x]}, duplex=False)
     assert not (tmp_path / "a.pdf").exists()
+
+
+def test_to_pdf_converts_a_copy_never_the_original(tmp_path, monkeypatch):
+    src = tmp_path / "s.docx"
+    src.write_bytes(b"unsaved edits")
+    seen = []
+
+    def runner(s, d):
+        seen.append(s)
+        assert s.read_bytes() == b"unsaved edits"
+        s.write_bytes(b"closed without saving")  # whatever the app does to its file
+        return pdf(d / f"{s.stem}.pdf")
+
+    monkeypatch.setitem(convert._CONVERTERS, "libreoffice", runner)
+    (tmp_path / "out").mkdir()
+    out = to_pdf(src, tmp_path / "out", ["libreoffice"])
+    assert out.exists()
+    assert seen[0] != src and seen[0].name == src.name
+    assert not seen[0].exists()  # private copy cleaned up
+    assert src.read_bytes() == b"unsaved edits"

@@ -42,8 +42,10 @@ $w = New-Object -ComObject Word.Application
 $w.Visible = $false
 $w.DisplayAlerts = 0
 try {
-    $d = $w.Documents.Open($env:PSYSET_SRC, $false, $true)
-    $d.SaveAs([ref]$env:PSYSET_OUT, [ref]17)
+    $src = $env:PSYSET_SRC
+    $out = $env:PSYSET_OUT
+    $d = $w.Documents.Open($src, $false, $true)
+    $d.SaveAs([ref]$out, [ref]17)
     $d.Close(0)
 } finally {
     $w.Quit()
@@ -112,8 +114,10 @@ def _word(src: Path, out_dir: Path) -> Path:
     MAC_WORD_TMP.mkdir(parents=True, exist_ok=True)
     work = Path(tempfile.mkdtemp(dir=MAC_WORD_TMP))
     try:
+        # Word never sees the caller's file: it opens a private copy inside its container.
+        copy = Path(shutil.copy2(src, work / src.name))
         produced = work / out.name
-        _run(["osascript", "-e", APPLESCRIPT, str(src.resolve()), str(produced)])
+        _run(["osascript", "-e", APPLESCRIPT, str(copy), str(produced)])
         if produced.exists():
             shutil.move(produced, out)
     finally:
@@ -130,24 +134,30 @@ _CONVERTERS = {"word": _word, "libreoffice": _libreoffice}
 
 
 def to_pdf(src: Path, out_dir: Path, converters: list[str] | None = None) -> Path:
-    """Convert `src` to a PDF inside `out_dir`; the original is never touched."""
+    """Convert a private copy of `src` to a PDF inside `out_dir`; the original is never opened."""
     src, out_dir = Path(src), Path(out_dir)
     converters = find_converters() if converters is None else converters
     if not converters:
         raise NoConverter("Neither Microsoft Word nor LibreOffice was found")
     reason = ""
-    for name in converters:
+    # An app that already has `src` open (maybe with unsaved edits) must not get it back to close.
+    with tempfile.TemporaryDirectory() as work:
         try:
-            out = _CONVERTERS[name](src, out_dir)
-            if out.exists():
-                return out
-            reason = f"{name}: no PDF was produced"
-        except subprocess.TimeoutExpired:
-            reason = f"{name}: timed out after {TIMEOUT} s"
-        except subprocess.CalledProcessError as e:
-            reason = f"{name}: {(e.stderr or '').strip() or e}"
+            copy = Path(shutil.copy2(src, Path(work) / src.name))
         except OSError as e:
-            reason = f"{name}: {e}"
+            raise ConversionError(src, str(e)) from e
+        for name in converters:
+            try:
+                out = _CONVERTERS[name](copy, out_dir)
+                if out.exists():
+                    return out
+                reason = f"{name}: no PDF was produced"
+            except subprocess.TimeoutExpired:
+                reason = f"{name}: timed out after {TIMEOUT} s"
+            except subprocess.CalledProcessError as e:
+                reason = f"{name}: {(e.stderr or '').strip() or e}"
+            except OSError as e:
+                reason = f"{name}: {e}"
     raise ConversionError(src, reason)
 
 
