@@ -36,6 +36,12 @@ def group(insts: list[Instrument], with_domain: bool) -> list[tuple[str, list[In
     return groups
 
 
+def wheel_notches(delta: int, windowing: str, tk_version: float) -> float:
+    """MouseWheel %D -> notches (positive = up). Only Tk 8.6 on macOS sends raw deltas;
+    Windows, X11 and Tk 9 everywhere send 120 per notch, with partial deltas from smooth wheels."""
+    return float(delta) if windowing == "aqua" and tk_version < 9 else delta / 120
+
+
 class MainWindow:
     def __init__(self, root: tk.Tk, cfg: dict):
         self.root, self.cfg = root, cfg
@@ -413,14 +419,18 @@ class MainWindow:
 
     # ---------------------------------------------------------- scrolling --
     def _scroll_list(self, e, pixels: float) -> None:
-        w = self.root.winfo_containing(e.x_root, e.y_root)
-        if w is None or not str(w).startswith(str(self.canvas)) or not pixels:
+        try:
+            w = self.root.winfo_containing(e.x_root, e.y_root)
+        except (KeyError, tk.TclError):  # e.g. a Combobox popdown: no Python widget
+            return
+        c = str(self.canvas)
+        if w is None or not pixels or not (str(w) == c or str(w).startswith(c + ".")):
             return
         self.canvas.yview_scroll(int(pixels) or (1 if pixels > 0 else -1), "units")
 
     def _on_wheel(self, e) -> None:
-        d = e.delta / 120 if abs(e.delta) >= 120 else e.delta  # Windows/Tk 9: 120 per notch
-        self._scroll_list(e, -d * 30)
+        n = wheel_notches(e.delta, self.root.tk.call("tk", "windowingsystem"), tk.TkVersion)
+        self._scroll_list(e, -n * 30)
 
     def _on_touchpad(self, e) -> None:
         _dx, dy = self.root.tk.call("tk::PreciseScrollDeltas", e.delta)
