@@ -152,7 +152,10 @@ def test_plan_instructions_replacement_must_not_overwrite_the_other_listed_file(
 @pytest.fixture
 def trash(monkeypatch):
     sent = []
-    monkeypatch.setattr(dialogs.manage.send2trash, "send2trash", lambda p: sent.append(p))
+    def to_trash(p):  # like the real Trash: the file is gone afterwards
+        sent.append(p)
+        Path(p).unlink()
+    monkeypatch.setattr(dialogs.manage.send2trash, "send2trash", to_trash)
     return sent
 
 
@@ -165,9 +168,9 @@ def test_apply_plans_swap_and_instructions_replace(make_lib, tmp_path, trash):
                         ("rename", folder / "rating-B.docx", "A")],
              "instructions": [("put", pdf(tmp_path / "i.pdf"), "", folder / "instructions.pdf")]}
     apply_plans(folder, plans)
-    assert (folder / "rating-B.pdf").read_bytes() == b"was A" and (folder / "rating-A.docx").exists()
+    assert (folder / "t-rating-B.pdf").read_bytes() == b"was A" and (folder / "t-rating-A.docx").exists()
     assert trash == [str(folder / "instructions.pdf")]  # the .docx is kept
-    assert (folder / "instructions.docx").exists() and (folder / "instructions.pdf").exists()
+    assert (folder / "instructions.docx").exists() and (folder / "t-instructions.pdf").exists()
 
 
 def test_apply_plans_failure_restores_parked_files(make_lib, tmp_path, trash, monkeypatch):

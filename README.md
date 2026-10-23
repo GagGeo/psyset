@@ -32,41 +32,47 @@ test:
 
 ```
 Tests library/
-├── Executive functioning/         ← domain
-│   ├── TMT/                       ← test
-│   │   ├── psyset.json            ← test info (written by the app)
-│   │   ├── test.pdf               ← patient sheet
-│   │   ├── rating.pdf             ← CRF (the clinician's scoring form)
-│   │   └── instructions.pdf       ← administration instructions
+├── Executive functioning/              ← domain
+│   ├── TMT/                            ← test
+│   │   ├── psyset.json                 ← test info (written by the app)
+│   │   ├── tmt-test.pdf                ← patient sheet
+│   │   ├── tmt-rating.pdf              ← CRF (the clinician's scoring form)
+│   │   └── tmt-instructions.pdf        ← administration instructions
 │   └── Hayling/
-│       ├── rating.pdf
-│       ├── instructions.docx
-│       ├── norms.pdf              ← norms
-│       └── norm-calculation.xlsx  ← also counted as norms
+│       ├── hayling-rating.pdf
+│       ├── hayling-instructions.docx
+│       ├── hayling-norms.pdf           ← norms
+│       └── hayling-norm-calculation.xlsx  ← also counted as norms
 └── Memory/
     └── CVLT/
-        ├── test-A.pdf             ← version A: patient sheet…
-        ├── rating-A.pdf           ←   …and its CRF
-        ├── test-B.pdf             ← version B
-        └── rating-B.docx
+        ├── cvlt-test-A.pdf             ← version A: patient sheet…
+        ├── cvlt-rating-A.pdf           ←   …and its CRF
+        ├── cvlt-test-B.pdf             ← version B
+        └── cvlt-rating-B.docx
 ```
 
-The four roles are recognised from the file name:
+The four roles are recognised from a word in the file name; anything before it
+is up to you (`cvlt-test.pdf`, `CVLT_rating_A.pdf`, `TMT rating B.docx`, or
+simply `test.pdf`):
 
-| File | Role | Tag |
+| Word in the name | Role | Tag |
 |---|---|---|
 | `test` | patient sheet | `SHEET` |
 | `rating` | CRF | `CRF` |
 | `instructions` | instructions | `INSTR` |
-| anything starting with `norm` (`norms.pdf`, `norm-calculation.xlsx`…) | norms (one or several files) | `NORMS` |
+| `norms` (or any word starting with `norm`: `norm-calculation.xlsx`…) | norms (one or several files) | `NORMS` |
 
-- **Versions**: `test-A.pdf` and `rating-A.pdf` belong together (parallel
-  forms A/B, or one sheet per subtest). An unlabelled file (`test.pdf`) is
+- **Versions**: what follows `test` or `rating` is the version label:
+  `cvlt-test-A.pdf` and `cvlt-rating-A.pdf` belong together (parallel forms
+  A/B, or one sheet per subtest). A file without a label (`cvlt-test.pdf`) is
   shared by all versions.
+- If the test's own name contains one of these words, the last one counts
+  (`rating-scale-test.pdf` is a patient sheet).
+- Files PsySet adds or renames itself are named after the test:
+  `tmt-test.pdf`, `tmt-rating-A.pdf`, `tmt-norms-2.jpg`…
 - Patient sheets and CRFs can be **PDF, Word (`.doc`, `.docx`) or `.odt`**.
-- A test folder laid out differently, or files with unusual names, still show
-  up: unclassified files are greyed out, and one click lets you assign them a
-  role (the file is then renamed).
+- Files with other names still show up: unclassified files are greyed out,
+  and one click lets you assign them a role (the file is then renamed).
 
 No library yet? At first launch, PsySet can **create an empty one** with the
 recommended domains: Executive functioning, Memory, Instrumental functioning,
@@ -165,42 +171,49 @@ par domaine, un sous-dossier par test :
 
 ```
 Bibliothèque de tests/
-├── Fonctions exécutives/          ← domaine
-│   ├── TMT/                       ← test
-│   │   ├── psyset.json            ← fiche du test (écrite par l'application)
-│   │   ├── test.pdf               ← feuille patient
-│   │   ├── rating.pdf             ← CRF (feuille de cotation du clinicien)
-│   │   └── instructions.pdf       ← consignes de passation
+├── Fonctions exécutives/               ← domaine
+│   ├── TMT/                            ← test
+│   │   ├── psyset.json                 ← fiche du test (écrite par l'application)
+│   │   ├── tmt-test.pdf                ← feuille patient
+│   │   ├── tmt-rating.pdf              ← CRF (feuille de cotation du clinicien)
+│   │   └── tmt-instructions.pdf        ← consignes de passation
 │   └── Hayling/
-│       ├── rating.pdf
-│       ├── instructions.docx
-│       ├── norms.pdf              ← normes
-│       └── norm-calculation.xlsx  ← compte aussi comme normes
+│       ├── hayling-rating.pdf
+│       ├── hayling-instructions.docx
+│       ├── hayling-norms.pdf           ← normes
+│       └── hayling-norm-calculation.xlsx  ← compte aussi comme normes
 └── Mémoire/
     └── CVLT/
-        ├── test-A.pdf             ← version A : feuille patient…
-        ├── rating-A.pdf           ←   …et son CRF
-        ├── test-B.pdf             ← version B
-        └── rating-B.docx
+        ├── cvlt-test-A.pdf             ← version A : feuille patient…
+        ├── cvlt-rating-A.pdf           ←   …et son CRF
+        ├── cvlt-test-B.pdf             ← version B
+        └── cvlt-rating-B.docx
 ```
 
-Les quatre rôles sont reconnus d'après le nom du fichier :
+Les quatre rôles sont reconnus grâce à un mot du nom de fichier ; ce qui le
+précède est libre (`cvlt-test.pdf`, `CVLT_rating_A.pdf`, `TMT rating B.docx`,
+ou simplement `test.pdf`) :
 
-| Fichier | Rôle | Pastille |
+| Mot dans le nom | Rôle | Pastille |
 |---|---|---|
 | `test` | feuille patient | `FEUILLE` |
 | `rating` | CRF | `CRF` |
 | `instructions` | consignes | `CONSIG.` |
-| tout nom commençant par `norm` (`norms.pdf`, `norm-calcul.xlsx`…) | normes (un ou plusieurs fichiers) | `NORMES` |
+| `norms` (ou tout mot commençant par `norm` : `norm-calcul.xlsx`…) | normes (un ou plusieurs fichiers) | `NORMES` |
 
-- **Versions** : `test-A.pdf` et `rating-A.pdf` vont ensemble (formes
-  parallèles A/B, ou une feuille par sous-test). Un fichier sans étiquette
-  (`test.pdf`) est partagé par toutes les versions.
+- **Versions** : ce qui suit `test` ou `rating` est l'étiquette de version :
+  `cvlt-test-A.pdf` et `cvlt-rating-A.pdf` vont ensemble (formes parallèles
+  A/B, ou une feuille par sous-test). Un fichier sans étiquette
+  (`cvlt-test.pdf`) est partagé par toutes les versions.
+- Si le nom du test contient lui-même l'un de ces mots, c'est le dernier qui
+  compte (`rating-scale-test.pdf` est une feuille patient).
+- Les fichiers que PsySet ajoute ou renomme lui-même portent le nom du test :
+  `tmt-test.pdf`, `tmt-rating-A.pdf`, `tmt-norms-2.jpg`…
 - Les feuilles patient et les CRF peuvent être en **PDF, Word (`.doc`,
   `.docx`) ou `.odt`**.
-- Un dossier de test rangé autrement, ou des fichiers au nom inhabituel,
-  s'affichent quand même : les fichiers non classés sont grisés, et un clic
-  permet de leur attribuer un rôle (le fichier est alors renommé).
+- Les fichiers aux autres noms s'affichent quand même : les fichiers non
+  classés sont grisés, et un clic permet de leur attribuer un rôle (le
+  fichier est alors renommé).
 
 Pas de bibliothèque ? Au premier lancement, PsySet peut en **créer une vide**
 avec les domaines recommandés : Fonctions exécutives, Mémoire, Fonctions

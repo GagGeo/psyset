@@ -6,6 +6,7 @@ import pytest
 from psyset.library import (
     LibraryMissing,
     list_domains,
+    parse_role,
     read_info,
     scan_library,
     write_info,
@@ -44,10 +45,10 @@ def test_versions_labels(make_lib):
 
 def test_unclassified_and_ignored(make_lib):
     root = make_lib({"Exec": {"tmt": [
-        "merged-inst-test.pdf", ".DS_Store", "~$rating.docx", "psyset.json"]}})
+        "merged-inst.pdf", ".DS_Store", "~$rating.docx", "psyset.json"]}})
     (root / "Exec" / "tmt" / "sub").mkdir()
     t = one(root)
-    assert [p.name for p in t.unclassified] == ["merged-inst-test.pdf"]
+    assert [p.name for p in t.unclassified] == ["merged-inst.pdf"]
     assert t.sheets == t.crfs == {}
     assert t.instructions == t.norms == t.unsupported == []
 
@@ -169,3 +170,22 @@ def test_unreadable_folders_skipped(make_lib, locked):
     locked(root)  # the root itself unreadable: still a library problem
     with pytest.raises(OSError):
         scan_library(root)
+
+
+def test_parse_role_any_prefix_last_role_word_wins():
+    assert parse_role("test") == ("test", "")
+    assert parse_role("cvlt-test") == ("test", "")
+    assert parse_role("CVLT_rating_A") == ("rating", "A")
+    assert parse_role("TMT rating B") == ("rating", "B")
+    assert parse_role("rating-scale-test") == ("test", "")  # the test's own name holds a role word
+    assert parse_role("cvlt-instructions") == ("instructions", "")
+    assert parse_role("norm-calculation") == ("norms", "")
+    assert parse_role("cvlt-norms") == ("norms", "")
+    assert parse_role("testament") is None and parse_role("merged-inst") is None
+
+
+def test_prefixed_names_are_recognised(make_lib):
+    t = one(make_lib({"Mem": {"cvlt": ["cvlt-test.pdf", "cvlt-rating-A.pdf", "CVLT_rating_B.docx",
+                                       "cvlt-instructions.doc", "cvlt-norms.jpg"]}}))
+    assert list(t.sheets) == [""] and sorted(t.crfs) == ["A", "B"] and t.versions() == ["A", "B"]
+    assert len(t.instructions) == len(t.norms) == 1 and t.unclassified == []

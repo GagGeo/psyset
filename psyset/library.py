@@ -7,7 +7,24 @@ from pathlib import Path
 SUPPORTED = {".pdf", ".doc", ".docx", ".odt"}
 INFO_FILE = "psyset.json"
 SYSTEM_FILES = {"thumbs.db", "desktop.ini", "icon\r"}  # OS clutter: neither a role nor unclassified
-_ROLE = re.compile(r"(test|rating)(?:-(.+))?", re.I)
+_WORD = re.compile(r"[^-_ ]+")
+
+
+def parse_role(stem: str) -> tuple[str, str] | None:
+    """(role, version label) from a file stem, or None. Any prefix is allowed and the last
+    role word wins, so the test's own name may contain one: "test" -> ("test", ""),
+    "cvlt-rating-A" -> ("rating", "A"), "rating-scale-test" -> ("test", ""),
+    "CVLT_norms" -> ("norms", ""), "norm-calculation" -> ("norms", "")."""
+    hit = None
+    for m in _WORD.finditer(stem):
+        word = m.group().casefold()
+        if word in ("test", "rating"):
+            hit = (word, stem[m.end():].lstrip("-_ "))
+        elif word.startswith("instruction"):
+            hit = ("instructions", "")
+        elif word.startswith("norm"):
+            hit = ("norms", "")
+    return hit
 
 
 class LibraryMissing(Exception):
@@ -94,14 +111,13 @@ def _scan_test(folder: Path, domain: str) -> Instrument | None:
         if (f.name.startswith((".", "~$")) or f.name == INFO_FILE
                 or f.name.casefold() in SYSTEM_FILES):
             continue
-        stem, ext = f.stem.casefold(), f.suffix.lower()
-        m = _ROLE.fullmatch(f.stem)
-        if m:
+        ext = f.suffix.lower()
+        role, label = parse_role(f.stem) or ("", "")
+        if role in ("test", "rating"):
             if ext not in SUPPORTED:
                 inst.unsupported.append(f)
                 continue
-            slots = inst.sheets if m.group(1).lower() == "test" else inst.crfs
-            label = m.group(2) or ""
+            slots = inst.sheets if role == "test" else inst.crfs
             old = slots.get(label)
             if old is None:
                 slots[label] = f
@@ -110,9 +126,9 @@ def _scan_test(folder: Path, domain: str) -> Instrument | None:
                 slots[label] = f
             else:
                 inst.duplicates.append(f)
-        elif stem.startswith("instruction"):
+        elif role == "instructions":
             inst.instructions.append(f)
-        elif stem.startswith("norm"):
+        elif role == "norms":
             inst.norms.append(f)
         else:
             inst.unclassified.append(f)

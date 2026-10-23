@@ -51,8 +51,9 @@ def test_add_test_layout(make_lib, tmp_path):
     before = {p: p.read_bytes() for p in (tmp_path / "src").iterdir()}
     folder = manage.add_test(root, "Attention", "TMT", "Ref", "Sub", **kw)
     assert folder == root / "Attention" / "TMT"
-    assert names(folder) == {"test.pdf", "rating-A.pdf", "rating-B.docx", "instructions.pdf",
-                             "norms.pdf", "norms-2.jpg", "psyset.json"}
+    assert names(folder) == {"tmt-test.pdf", "tmt-rating-A.pdf", "tmt-rating-B.docx",
+                             "tmt-instructions.pdf", "tmt-norms.pdf", "tmt-norms-2.jpg",
+                             "psyset.json"}
     assert {p: p.read_bytes() for p in (tmp_path / "src").iterdir()} == before
     assert read_info(folder) == {"name": "TMT", "reference": "Ref", "subdomain": "Sub"}
 
@@ -65,7 +66,7 @@ def test_add_test_labels_rules(make_lib, tmp_path):
             manage.add_test(root, "Attention", "T", "", "", sheets, [], None, [])
     assert not (root / "Attention" / "T").exists()
     f = manage.add_test(root, "Attention", "T", "", "", [("ignored", a)], [], None, [])
-    assert "test.pdf" in names(f)
+    assert "t-test.pdf" in names(f)
 
 
 def test_add_test_new_domain_created(make_lib, tmp_path):
@@ -118,7 +119,7 @@ def test_put_file_replaces_same_role_label(make_lib, tmp_path, trash):
     root = make_lib({"A": {"T": ["rating-A.docx", "rating-B.docx"]}})
     folder = root / "A" / "T"
     dest = manage.put_file(folder, "rating", pdf(tmp_path / "new.PDF"), "A")
-    assert dest == folder / "rating-A.pdf" and dest.exists()
+    assert dest == folder / "t-rating-A.pdf" and dest.exists()
     assert trash == [str(folder / "rating-A.docx")]
     assert not [p for p in folder.iterdir() if p.name.startswith(".")]
 
@@ -126,8 +127,8 @@ def test_put_file_replaces_same_role_label(make_lib, tmp_path, trash):
 def test_put_file_norms_appends(make_lib, tmp_path, trash):
     root = make_lib({"A": {"T": ["norms.pdf"]}})
     folder = root / "A" / "T"
-    assert manage.put_file(folder, "norms", pdf(tmp_path / "n.pdf")).name == "norms-2.pdf"
-    assert manage.put_file(folder, "norms", pdf(tmp_path / "n.pdf")).name == "norms-3.pdf"
+    assert manage.put_file(folder, "norms", pdf(tmp_path / "n.pdf")).name == "t-norms.pdf"
+    assert manage.put_file(folder, "norms", pdf(tmp_path / "n.pdf")).name == "t-norms-2.pdf"
     assert trash == []
 
 
@@ -141,11 +142,11 @@ def test_put_file_failed_copy_keeps_old(make_lib, tmp_path, trash):
 def test_assign_role(make_lib):
     root = make_lib({"A": {"T": ["merged-inst-test.pdf", "other.PDF", "instructions.docx"]}})
     folder = root / "A" / "T"
-    assert manage.assign_role(folder / "merged-inst-test.pdf", "instructions").name == "instructions.pdf"
-    assert names(folder) == {"instructions.pdf", "other.PDF", "instructions.docx"}
+    assert manage.assign_role(folder / "merged-inst-test.pdf", "instructions").name == "t-instructions.pdf"
+    assert names(folder) == {"t-instructions.pdf", "other.PDF", "instructions.docx"}
     with pytest.raises(AlreadyExists):
         manage.assign_role(folder / "other.PDF", "instructions")
-    assert manage.assign_role(folder / "other.PDF", "test", "V1").name == "test-V1.pdf"
+    assert manage.assign_role(folder / "other.PDF", "test", "V1").name == "t-test-V1.pdf"
 
 
 def test_remove_uses_trash(make_lib, trash):
@@ -258,13 +259,13 @@ def test_put_instructions_replaces_only_the_named_file(make_lib, tmp_path, trash
     # replacing the .pdf by a .pdf: only that file goes to the Trash
     dest = manage.put_file(folder, "instructions", pdf(tmp_path / "new.pdf"),
                            replaces=folder / "instructions.pdf")
-    assert dest == folder / "instructions.pdf" and trash == [str(folder / "instructions.pdf")]
+    assert dest == folder / "t-instructions.pdf" and trash == [str(folder / "instructions.pdf")]
     assert (folder / "instructions.docx").exists()
     # replacing the .docx by a PDF would overwrite the other listed file: refused
     with pytest.raises(AlreadyExists):
         manage.put_file(folder, "instructions", pdf(tmp_path / "n2.pdf"),
                         replaces=folder / "instructions.docx")
-    assert len(trash) == 1 and names(folder) == {"instructions.docx", "instructions.pdf"}
+    assert len(trash) == 1 and names(folder) == {"instructions.docx", "instructions.pdf", "t-instructions.pdf"}
     with pytest.raises(AlreadyExists):  # nothing named to replace: an existing file is kept
         manage.put_file(folder, "instructions", pdf(tmp_path / "n3.pdf"))
     assert len(trash) == 1

@@ -9,7 +9,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from psyset import manage
 from psyset.config import save_config
 from psyset.i18n import t
-from psyset.library import (_ROLE, SUPPORTED, Instrument, LibraryMissing, list_domains,
+from psyset.library import (SUPPORTED, Instrument, LibraryMissing, list_domains, parse_role,
                              scan_library)
 from psyset.manage import AlreadyExists, InvalidName, _key, holds_role, sanitize_folder_name
 from psyset.ui.theme import C, Fonts, setup_styles
@@ -68,8 +68,7 @@ def form_error(lang: str, name: str, domain: str) -> str | None:
 
 def role_labels(files, role: str) -> list[str]:
     """Version labels that `files` hold for `role` ("" = unlabelled)."""
-    return [m.group(2) or "" for f in files
-            if (m := _ROLE.fullmatch(f.stem)) and m.group(1).lower() == role]
+    return [found[1] for f in files if (found := parse_role(f.stem)) and found[0] == role]
 
 
 def _clean(label: str) -> str:
