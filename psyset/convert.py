@@ -41,6 +41,7 @@ $ErrorActionPreference = 'Stop'
 $w = New-Object -ComObject Word.Application
 $w.Visible = $false
 $w.DisplayAlerts = 0
+$w.AutomationSecurity = 3  # msoAutomationSecurityForceDisable: Word started by COM would run macros silently
 try {
     $src = $env:PSYSET_SRC
     $out = $env:PSYSET_OUT

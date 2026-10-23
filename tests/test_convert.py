@@ -187,3 +187,8 @@ def test_generate_replace_failure_lists_what_was_written(tmp_path, monkeypatch):
     with pytest.raises(OutputError) as e:  # failing before any replace: nothing written
         generate({tmp_path / "no" / "c.pdf": [good]}, duplex=False)
     assert e.value.written == []
+
+
+def test_word_on_windows_opens_documents_with_macros_disabled():
+    from psyset.convert import POWERSHELL
+    assert POWERSHELL.index("AutomationSecurity = 3") < POWERSHELL.index("Documents.Open")
