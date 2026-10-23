@@ -10,7 +10,7 @@ from pathlib import Path
 import send2trash
 
 from psyset.i18n import DOMAINS
-from psyset.library import _ROLE, read_info, write_info
+from psyset.library import parse_role, read_info, write_info
 
 ROLES = ("test", "rating", "instructions", "norms")
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
@@ -73,10 +73,10 @@ def _labels(items: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
 
 def holds_role(f: Path, role: str, label: str = "") -> bool:
     """Does file `f` hold `role` (+ sanitized `label`), any extension? put_file replaces such files."""
-    if role in ("test", "rating"):
-        m = _ROLE.fullmatch(f.stem)
-        return bool(m) and m.group(1).lower() == role and _key(m.group(2) or "") == _key(label)
-    return _key(f.stem) == role
+    found = parse_role(f.stem)
+    if not found or found[0] != role:
+        return False
+    return role not in ("test", "rating") or _key(found[1]) == _key(label)
 
 
 def _matching(folder: Path, role: str, label: str) -> list[Path]:
@@ -89,18 +89,19 @@ def _clean_label(label: str) -> str:
 
 
 def _target_name(folder: Path, role: str, label: str, ext: str) -> str:
-    """Standard file name for `role` (+ sanitized `label`) in `folder`."""
+    """Standard file name, test name first: cvlt-test.pdf, cvlt-rating-A.pdf, cvlt-norms-2.jpg."""
     if role not in ROLES:
         raise ValueError(f"unknown role: {role}")
+    prefix = folder.name.casefold().replace(" ", "-") + "-"
     if role == "norms":  # never replaces: first free norms, norms-2, ...
         taken = {_key(f.stem) for f in folder.iterdir()}
         n = 1
-        while (stem := "norms" if n == 1 else f"norms-{n}") in taken:
+        while _key(stem := prefix + ("norms" if n == 1 else f"norms-{n}")) in taken:
             n += 1
         return stem + ext
     if role == "instructions":
-        return "instructions" + ext
-    return (f"{role}-{label}" if label else role) + ext
+        return prefix + "instructions" + ext
+    return prefix + (f"{role}-{label}" if label else role) + ext
 
 
 def put_file(folder: Path, role: str, src: Path, label: str = "",
