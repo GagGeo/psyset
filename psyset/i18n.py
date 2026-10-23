@@ -127,6 +127,11 @@ STRINGS = {
         "err_lib_exists": "Le dossier {path} existe déjà. Choisissez un autre nom.",
         "err_hidden_file": ("{file} serait remplacé, et ce fichier n'apparaît pas dans le formulaire. "
                             "Renommez-le ou sortez-le du dossier du test d'abord."),
+        "err_folder_busy": ("Le dossier du test n'a pas pu être renommé ni déplacé :\n{path}\n{reason}"
+                            "\n\nFermez les fichiers de ce test et réessayez."),
+        "err_parked": ("L'enregistrement a échoué, et ces fichiers n'ont pas pu reprendre leur nom : "
+                       "{files}\n\nIls sont dans le dossier du test sous ce nom ; "
+                       "renommez-les à la main."),
         # --- assign role / confirmations
         "assign_title": "Attribuer un rôle",
         "assign_prompt": "Quel est le rôle de {file} ?",
@@ -260,6 +265,11 @@ STRINGS = {
         "err_lib_exists": "The folder {path} already exists. Choose another name.",
         "err_hidden_file": ("{file} would be replaced, and it is not listed in this form. "
                             "Rename it or move it out of the test folder first."),
+        "err_folder_busy": ("The test folder could not be renamed or moved:\n{path}\n{reason}"
+                            "\n\nClose this test's files and retry."),
+        "err_parked": ("Saving failed, and these files could not get their name back: "
+                       "{files}\n\nThey are in the test folder under that name; "
+                       "rename them by hand."),
         # --- assign role / confirmations
         "assign_title": "Assign a role",
         "assign_prompt": "What is the role of {file}?",

@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pytest
 
 from .conftest import pdf
@@ -191,3 +193,78 @@ def test_update_info_keeps_folder_name_when_display_name_unchanged(make_lib):
     assert manage.update_info(bare / "Att" / "Bare", bare, "Bare", "r", "", "Att") == bare / "Att" / "Bare"
     moved = manage.update_info(folder, root, "RL/RI 16: long", "x", "", "Memoire")
     assert moved == root / "Memoire" / "hand-renamed"
+
+
+def _snapshot(root):
+    return sorted((p.relative_to(root).as_posix(), p.read_bytes() if p.is_file() else None)
+                  for p in root.rglob("*"))
+
+
+def test_update_info_move_failure_copies_and_deletes_nothing(make_lib, monkeypatch):
+    root = make_lib({"Mem": {"TMT": ["test.pdf"]}})
+    folder = root / "Mem" / "TMT"
+    manage.write_info(folder, "TMT", "r", "")
+    before = _snapshot(root)
+
+    def busy(*_a):
+        raise PermissionError(13, "file in use")
+    monkeypatch.setattr(manage.os, "rename", busy)
+    monkeypatch.setattr(manage.shutil, "copytree", lambda *a, **k: pytest.fail("copied"))
+    monkeypatch.setattr(manage.shutil, "rmtree", lambda *a, **k: pytest.fail("deleted"))
+    for name, domain in (("TMT-2", "Mem"), ("TMT", "New domain"), ("tmt", "Mem")):
+        with pytest.raises(manage.FolderBusy) as e:
+            manage.update_info(folder, root, name, "changed", "", domain)
+        assert e.value.path == folder
+        assert _snapshot(root) == before  # folder intact, psyset.json unchanged, no new domain
+
+
+def test_case_only_rename_second_step_fails_rolls_back(make_lib, monkeypatch):
+    root = make_lib({"Att": {"TMT": ["test.pdf"]}})
+    folder = root / "Att" / "TMT"
+    real, calls = manage.os.rename, []
+
+    def second_fails(src, dst):
+        calls.append(Path(dst).name)
+        if len(calls) == 2:
+            raise PermissionError(13, "file in use")
+        real(src, dst)
+    monkeypatch.setattr(manage.os, "rename", second_fails)
+    with pytest.raises(manage.FolderBusy) as e:
+        manage.update_info(folder, root, "tmt", "", "", "Att")
+    assert calls[0].startswith("psyset-renaming-") and calls[0].endswith("-TMT")  # visible
+    assert names(root / "Att") == {"TMT"} and e.value.path == folder  # rolled back
+
+
+def test_case_only_rename_rollback_fails_leaves_it_visible(make_lib, monkeypatch):
+    root = make_lib({"Att": {"TMT": ["test.pdf"]}})
+    real, calls = manage.os.rename, []
+
+    def only_first_works(src, dst):
+        calls.append(dst)
+        if len(calls) > 1:
+            raise PermissionError(13, "file in use")
+        real(src, dst)
+    monkeypatch.setattr(manage.os, "rename", only_first_works)
+    with pytest.raises(manage.FolderBusy) as e:
+        manage.update_info(root / "Att" / "TMT", root, "tmt", "", "", "Att")
+    (left,) = (root / "Att").iterdir()
+    assert not left.name.startswith(".") and e.value.path == left
+    assert (left / "test.pdf").exists()
+
+
+def test_put_instructions_replaces_only_the_named_file(make_lib, tmp_path, trash):
+    root = make_lib({"A": {"T": ["instructions.docx", "instructions.pdf"]}})
+    folder = root / "A" / "T"
+    # replacing the .pdf by a .pdf: only that file goes to the Trash
+    dest = manage.put_file(folder, "instructions", pdf(tmp_path / "new.pdf"),
+                           replaces=folder / "instructions.pdf")
+    assert dest == folder / "instructions.pdf" and trash == [str(folder / "instructions.pdf")]
+    assert (folder / "instructions.docx").exists()
+    # replacing the .docx by a PDF would overwrite the other listed file: refused
+    with pytest.raises(AlreadyExists):
+        manage.put_file(folder, "instructions", pdf(tmp_path / "n2.pdf"),
+                        replaces=folder / "instructions.docx")
+    assert len(trash) == 1 and names(folder) == {"instructions.docx", "instructions.pdf"}
+    with pytest.raises(AlreadyExists):  # nothing named to replace: an existing file is kept
+        manage.put_file(folder, "instructions", pdf(tmp_path / "n3.pdf"))
+    assert len(trash) == 1

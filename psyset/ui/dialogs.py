@@ -86,7 +86,14 @@ def plan_files(lang: str, role: str, rows: list[dict], others: list[Path]):
     Returns (ops, error): ops are ("put", src, label, replaced file | None) and
     ("rename", path, label); error is the message that must stop the save, or None."""
     labelled, n = role in LABELLED, len(rows)
-    finals = [(r["label"].strip() if n > 1 else r["current"]) if labelled else "" for r in rows]
+
+    def final_label(r: dict) -> str:
+        if not labelled:
+            return ""
+        typed = r["label"].strip()
+        # untouched (the entry shows a stray space stripped): keep the label on disk
+        return r["current"] if n <= 1 or typed == r["current"].strip() else typed
+    finals = [final_label(r) for r in rows]
     keys = []
     for f in finals:
         try:
@@ -108,11 +115,63 @@ def plan_files(lang: str, role: str, rows: list[dict], others: list[Path]):
             clash = next((o for o in others if holds_role(o, role, _clean(final))), None)
             if clash:
                 return [], t(lang, "err_hidden_file", file=clash.name)
+        if role == "instructions" and r["src"]:  # replaces only its own row's file
+            target = _key("instructions" + r["src"].suffix.lower())
+            clash = next((o["path"] for o in rows if o is not r and o["path"]
+                          and _key(o["path"].name) == target), None)
+            if clash:
+                return [], t(lang, "err_file_exists", file=clash.name)
         if r["src"]:
             ops.append(("put", r["src"], final, r["path"]))
         elif r["path"] and final != r["current"]:
             ops.append(("rename", r["path"], final))
     return ops, None
+
+
+class ParkedFiles(Exception):
+    """Saving failed and these files of the test folder could not get their name back."""
+
+    def __init__(self, names: list[str]):
+        self.names = names
+        super().__init__(", ".join(names))
+
+
+def apply_plans(folder: Path, plans: dict[str, list]) -> None:
+    """Edit mode, after the info step (`folder` may have moved). Relabelled files wait under
+    visible temp names while files are put, so labels can swap and never meet a stale file;
+    a leftover (crash) shows up as an unclassified file, never hidden. ParkedFiles if a
+    failure leaves some of them under their temp name."""
+    moved = lambda p: folder / p.name
+    parked = []  # (temp, role, label, original)
+    try:
+        for role, ops in plans.items():
+            for op in ops:
+                if op[0] == "rename":
+                    tmp = folder / f"psyset-parked-{uuid.uuid4().hex[:8]}-{op[1].name}"
+                    os.rename(moved(op[1]), tmp)
+                    parked.append((tmp, role, op[2], moved(op[1])))
+        for role, ops in plans.items():
+            for op in ops:
+                if op[0] == "put":
+                    _, src, label, old = op
+                    dest = manage.put_file(folder, role, src, label,
+                                           replaces=moved(old) if old else None)
+                    if old and moved(old) != dest and moved(old).exists():
+                        manage.remove_file(moved(old))  # replaced under another name
+        while parked:
+            tmp, role, label, _ = parked[0]
+            manage.assign_role(tmp, role, label)
+            parked.pop(0)
+    finally:
+        lost = []
+        for tmp, _, _, original in parked:  # a failure must not leave a file renamed
+            try:
+                os.rename(tmp, original if not original.exists()
+                          else original.with_name("restored-" + original.name))
+            except OSError:
+                lost.append(tmp.name)
+        if lost:
+            raise ParkedFiles(lost)
 
 
 # -------------------------------------------------------------------- helpers --
@@ -522,7 +581,13 @@ class TestForm(tk.Toplevel):
             else:
                 folder = manage.update_info(self.inst.folder, self.root_dir, name, reference,
                                             subdomain, domain)
-                self._apply(folder, plans)
+                apply_plans(folder, plans)
+        except manage.FolderBusy as e:  # nothing was copied or deleted: keep the form
+            self.changed |= e.path != self.inst.folder  # left under its temp name: rescan
+            return _error(self, self.lang, self._t("err_folder_busy", path=str(e.path),
+                                                   reason=e.reason))
+        except ParkedFiles as e:
+            _error(self, self.lang, self._t("err_parked", files=", ".join(e.names)))
         except AlreadyExists as e:
             if folder is None:  # nothing written yet: let the user fix the name
                 return _error(self, self.lang, self._t("err_exists", domain=domain))
@@ -538,34 +603,3 @@ class TestForm(tk.Toplevel):
         self.result = folder
         self.changed = True
         self.destroy()
-
-    def _apply(self, folder: Path, plans: dict[str, list]) -> None:
-        """Edit mode, after the info step (`folder` may have moved). Relabelled files wait under
-        hidden temp names while files are put, so labels can swap and never meet a stale file."""
-        moved = lambda p: folder / p.name
-        parked = []  # (temp, role, label, original)
-        try:
-            for role, ops in plans.items():
-                for op in ops:
-                    if op[0] == "rename":
-                        tmp = folder / f".psyset-{uuid.uuid4().hex}{op[1].suffix}"
-                        os.rename(moved(op[1]), tmp)
-                        parked.append((tmp, role, op[2], moved(op[1])))
-            for role, ops in plans.items():
-                for op in ops:
-                    if op[0] == "put":
-                        _, src, label, old = op
-                        dest = manage.put_file(folder, role, src, label)
-                        if old and moved(old) != dest and moved(old).exists():
-                            manage.remove_file(moved(old))  # replaced under another name
-            while parked:
-                tmp, role, label, _ = parked[0]
-                manage.assign_role(tmp, role, label)
-                parked.pop(0)
-        finally:
-            for tmp, _, _, original in parked:  # a failure must not leave a file hidden
-                try:
-                    os.rename(tmp, original if not original.exists()
-                              else original.with_name("restored-" + original.name))
-                except OSError:
-                    pass

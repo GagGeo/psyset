@@ -26,6 +26,15 @@ class AlreadyExists(Exception):  # not "Test*": pytest would try to collect it
     pass
 
 
+class FolderBusy(Exception):
+    """The test folder could not be renamed or moved (a file inside is open?). Nothing was
+    copied or deleted; `path` is where the folder is now."""
+
+    def __init__(self, path: Path, reason: str = ""):
+        self.path, self.reason = Path(path), reason
+        super().__init__(f"{self.path}: {reason}" if reason else str(self.path))
+
+
 def sanitize_folder_name(name: str) -> str:
     s = _BAD_CHARS.sub("-", name).strip().strip(". ")  # leading dots would hide it from the scan
     if not s:
@@ -94,16 +103,25 @@ def _target_name(folder: Path, role: str, label: str, ext: str) -> str:
     return (f"{role}-{label}" if label else role) + ext
 
 
-def put_file(folder: Path, role: str, src: Path, label: str = "") -> Path:
+def put_file(folder: Path, role: str, src: Path, label: str = "",
+             replaces: Path | None = None) -> Path:
+    """Copy `src` in as `role`. test/rating: files of that role + label go to the Trash.
+    instructions: only `replaces` does; any other file already at the target name is
+    refused (AlreadyExists), never overwritten. norms: never replaces anything."""
     label = _clean_label(label)
     name = _target_name(folder, role, label, src.suffix.lower())
     dest = folder / name
-    tmp = folder / f".psyset-{uuid.uuid4().hex}.tmp"  # hidden: the scan ignores it
+    if role == "instructions" and _find_entry(folder, name, exclude=replaces):
+        raise AlreadyExists(name)
+    tmp = folder / f".psyset-{uuid.uuid4().hex}.tmp"  # a copy, not an original: hidden is fine
     try:
         shutil.copy2(src, tmp)  # copy first: a failed copy must not cost the old file
-        if role != "norms":
-            for old in _matching(folder, role, label):
-                send2trash.send2trash(str(old))
+        if role == "instructions":
+            old = [replaces] if replaces and replaces.exists() else []
+        else:
+            old = _matching(folder, role, label) if role != "norms" else []
+        for f in old:
+            send2trash.send2trash(str(f))
         os.replace(tmp, dest)
     finally:
         tmp.unlink(missing_ok=True)
@@ -158,15 +176,46 @@ def update_info(folder: Path, root: Path, name: str, reference: str,
         raise AlreadyExists(folder_name)
     target = dom / folder_name
     if target != folder:
+        new_domain = not dom.exists()
         dom.mkdir(parents=True, exist_ok=True)
-        if dom == folder.parent and _key(folder.name) == _key(folder_name):
-            tmp = folder.with_name(f".psyset-{uuid.uuid4().hex}")  # case-only rename, safe on
-            folder.rename(tmp)                                     # case-insensitive filesystems
-            tmp.rename(target)
-        else:
-            shutil.move(str(folder), str(target))
+        try:
+            _rename_folder(folder, target)
+        except FolderBusy:
+            if new_domain:
+                try:
+                    dom.rmdir()
+                except OSError:
+                    pass
+            raise
     write_info(target, name.strip(), reference, subdomain)
     return target
+
+
+def _rename_folder(folder: Path, target: Path) -> None:
+    """Rename only (one library volume): never shutil.move, whose copy + delete fallback
+    would permanently delete files when Windows refuses to rename a folder in use."""
+    if target.parent != folder.parent or _key(folder.name) != _key(target.name):
+        try:
+            os.rename(folder, target)
+        except OSError as e:
+            raise FolderBusy(folder, e.strerror or str(e)) from e
+        return
+    # case-only rename, in two steps for case-insensitive filesystems; the temp name is
+    # visible and keeps psyset.json, so a crash never hides the test
+    tmp = folder.with_name(f"psyset-renaming-{uuid.uuid4().hex[:8]}-{folder.name}")
+    try:
+        os.rename(folder, tmp)
+    except OSError as e:
+        raise FolderBusy(folder, e.strerror or str(e)) from e
+    try:
+        os.rename(tmp, target)
+    except OSError as e:
+        try:
+            os.rename(tmp, folder)
+            where = folder
+        except OSError:
+            where = tmp
+        raise FolderBusy(where, e.strerror or str(e)) from e
 
 
 def assign_role(path: Path, role: str, label: str = "") -> Path:

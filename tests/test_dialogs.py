@@ -1,9 +1,16 @@
-from psyset.i18n import t
-from psyset.ui import dialogs
 from pathlib import Path
 
-from psyset.ui.dialogs import (form_error, library_problem, next_label, plan_files,
-                               role_labels, trash_word)
+import pytest
+
+from .conftest import pdf
+from psyset.i18n import t
+from psyset.ui import dialogs
+from psyset.ui.dialogs import (ParkedFiles, apply_plans, form_error, library_problem,
+                               next_label, plan_files, role_labels, trash_word)
+
+
+def names(folder):
+    return {p.name for p in folder.iterdir()}
 
 
 def test_next_label():
@@ -124,3 +131,73 @@ def test_confirm_uses_trash_word():
         "Move “TMT” to the Recycle Bin?"
     assert t("fr", "confirm_remove_test", name="TMT", trash="Corbeille") == \
         "Mettre « TMT » à la Corbeille ?"
+
+
+def test_plan_label_with_stray_space_is_unchanged():
+    # test-A .pdf on disk: label "A " is shown stripped; saving untouched renames nothing
+    rows = [old("test-A .pdf", "A ", typed="A"), old("test-B.pdf", "B")]
+    assert plan_files("en", "test", rows, []) == ([], None)
+
+
+def test_plan_instructions_replacement_must_not_overwrite_the_other_listed_file():
+    docx = dict(old("instructions.docx", ""), src=Path("/picks/new.pdf"))
+    rows = [docx, old("instructions.pdf", "")]
+    assert plan_files("en", "instructions", rows, []) == (
+        [], t("en", "err_file_exists", file="instructions.pdf"))
+    pdf_row = dict(old("instructions.pdf", ""), src=Path("/picks/new.PDF"))
+    assert plan_files("en", "instructions", [old("instructions.docx", ""), pdf_row], []) == (
+        [("put", Path("/picks/new.PDF"), "", F / "instructions.pdf")], None)
+
+
+@pytest.fixture
+def trash(monkeypatch):
+    sent = []
+    monkeypatch.setattr(dialogs.manage.send2trash, "send2trash", lambda p: sent.append(p))
+    return sent
+
+
+def test_apply_plans_swap_and_instructions_replace(make_lib, tmp_path, trash):
+    root = make_lib({"A": {"T": ["rating-A.pdf", "rating-B.docx", "instructions.docx",
+                                 "instructions.pdf"]}})
+    folder = root / "A" / "T"
+    (folder / "rating-A.pdf").write_bytes(b"was A")
+    plans = {"rating": [("rename", folder / "rating-A.pdf", "B"),
+                        ("rename", folder / "rating-B.docx", "A")],
+             "instructions": [("put", pdf(tmp_path / "i.pdf"), "", folder / "instructions.pdf")]}
+    apply_plans(folder, plans)
+    assert (folder / "rating-B.pdf").read_bytes() == b"was A" and (folder / "rating-A.docx").exists()
+    assert trash == [str(folder / "instructions.pdf")]  # the .docx is kept
+    assert (folder / "instructions.docx").exists() and (folder / "instructions.pdf").exists()
+
+
+def test_apply_plans_failure_restores_parked_files(make_lib, tmp_path, trash, monkeypatch):
+    root = make_lib({"A": {"T": ["rating-A.pdf", "rating-B.pdf"]}})
+    folder = root / "A" / "T"
+    before = names(folder)
+
+    def broken(*_a, **_k):
+        raise OSError("disk full")
+    monkeypatch.setattr(dialogs.manage, "put_file", broken)
+    plans = {"rating": [("rename", folder / "rating-A.pdf", "C"),
+                        ("put", pdf(tmp_path / "n.pdf"), "D", None)]}
+    with pytest.raises(OSError):
+        apply_plans(folder, plans)
+    assert names(folder) == before  # parked file got its name back
+
+
+def test_apply_plans_reports_a_file_it_could_not_restore(make_lib, tmp_path, monkeypatch):
+    root = make_lib({"A": {"T": ["rating-A.pdf"]}})
+    folder = root / "A" / "T"
+    real = dialogs.os.rename
+
+    def park_only(src, dst):
+        if not Path(dst).name.startswith("psyset-parked-"):
+            raise PermissionError(13, "in use")
+        real(src, dst)
+    monkeypatch.setattr(dialogs.os, "rename", park_only)
+    monkeypatch.setattr(dialogs.manage, "assign_role", lambda *a: (_ for _ in ()).throw(OSError()))
+    with pytest.raises(ParkedFiles) as e:
+        apply_plans(folder, {"rating": [("rename", folder / "rating-A.pdf", "B")]})
+    (left,) = names(folder)
+    assert e.value.names == [left] and left.startswith("psyset-parked-")
+    assert left.endswith("-rating-A.pdf")  # visible, and says what it was
