@@ -3,13 +3,14 @@ replacements and removals go to the Trash (send2trash), never deleted."""
 import os
 import re
 import shutil
+import unicodedata
 import uuid
 from pathlib import Path
 
 import send2trash
 
 from psyset.i18n import DOMAINS
-from psyset.library import _ROLE, write_info
+from psyset.library import _ROLE, read_info, write_info
 
 ROLES = ("test", "rating", "instructions", "norms")
 _BAD_CHARS = re.compile(r'[<>:"/\\|?*\x00-\x1f\x7f]')
@@ -26,7 +27,7 @@ class AlreadyExists(Exception):  # not "Test*": pytest would try to collect it
 
 
 def sanitize_folder_name(name: str) -> str:
-    s = _BAD_CHARS.sub("-", name).strip().rstrip(". ")
+    s = _BAD_CHARS.sub("-", name).strip().strip(". ")  # leading dots would hide it from the scan
     if not s:
         raise InvalidName(name)
     if s.split(".")[0].rstrip().upper() in _RESERVED:
@@ -34,12 +35,17 @@ def sanitize_folder_name(name: str) -> str:
     return s
 
 
+def _key(name: str) -> str:
+    """Comparison key: macOS may store the same accented name as NFC or NFD."""
+    return unicodedata.normalize("NFC", name).casefold()
+
+
 def _find_entry(parent: Path, name: str, exclude: Path | None = None) -> Path | None:
     """Existing entry of `parent` whose name equals `name` ignoring case (`exclude` skipped)."""
     if not parent.is_dir():
         return None
     return next((p for p in parent.iterdir()
-                 if p.name.casefold() == name.casefold() and p != exclude), None)
+                 if _key(p.name) == _key(name) and p != exclude), None)
 
 
 def _labels(items: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
@@ -49,9 +55,9 @@ def _labels(items: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
     out, seen = [], set()
     for label, src in items:
         label = sanitize_folder_name(label)  # empty -> InvalidName
-        if label.casefold() in seen:
+        if _key(label) in seen:
             raise InvalidName(f"duplicate label: {label}")
-        seen.add(label.casefold())
+        seen.add(_key(label))
         out.append((label, src))
     return out
 
@@ -64,9 +70,9 @@ def _matching(folder: Path, role: str, label: str) -> list[Path]:
             continue
         if role in ("test", "rating"):
             m = _ROLE.fullmatch(f.stem)
-            if m and m.group(1).lower() == role and (m.group(2) or "").casefold() == label.casefold():
+            if m and m.group(1).lower() == role and _key(m.group(2) or "") == _key(label):
                 found.append(f)
-        elif f.stem.casefold() == role:
+        elif _key(f.stem) == role:
             found.append(f)
     return found
 
@@ -80,7 +86,7 @@ def _target_name(folder: Path, role: str, label: str, ext: str) -> str:
     if role not in ROLES:
         raise ValueError(f"unknown role: {role}")
     if role == "norms":  # never replaces: first free norms, norms-2, ...
-        taken = {f.stem.casefold() for f in folder.iterdir()}
+        taken = {_key(f.stem) for f in folder.iterdir()}
         n = 1
         while (stem := "norms" if n == 1 else f"norms-{n}") in taken:
             n += 1
@@ -116,8 +122,10 @@ def add_test(root: Path, domain: str, name: str, reference: str, subdomain: str,
         raise AlreadyExists(folder_name)
     new_domain = not dom.exists()
     folder = dom / folder_name
+    made = False
     try:
         folder.mkdir(parents=True)
+        made = True
         for role, items in (("test", sheets), ("rating", crfs)):
             for label, src in items:
                 put_file(folder, role, src, label)
@@ -127,23 +135,33 @@ def add_test(root: Path, domain: str, name: str, reference: str, subdomain: str,
             put_file(folder, "norms", src)
         write_info(folder, name.strip(), reference, subdomain)
     except BaseException:
-        shutil.rmtree(dom if new_domain else folder, ignore_errors=True)  # only what we just made
+        if made:  # remove only what this call created
+            shutil.rmtree(folder, ignore_errors=True)
+            if new_domain:
+                try:
+                    dom.rmdir()  # harmless failure if anything else is in it
+                except OSError:
+                    pass
         raise
     return folder
 
 
 def update_info(folder: Path, root: Path, name: str, reference: str,
                 subdomain: str, domain: str) -> Path:
-    folder_name = sanitize_folder_name(name)
+    current = (read_info(folder) or {}).get("name")
+    if name.strip() == (current if isinstance(current, str) and current else folder.name):
+        folder_name = folder.name  # name unchanged: never rename the folder unasked
+    else:
+        folder_name = sanitize_folder_name(name)
     dom_name = sanitize_folder_name(domain)
-    dom = folder.parent if folder.parent.name.casefold() == dom_name.casefold() else (
+    dom = folder.parent if _key(folder.parent.name) == _key(dom_name) else (
         _find_entry(root, dom_name) or root / dom_name)
     if _find_entry(dom, folder_name, exclude=folder):  # the folder itself is no clash ("TMT" -> "tmt")
         raise AlreadyExists(folder_name)
     target = dom / folder_name
     if target != folder:
         dom.mkdir(parents=True, exist_ok=True)
-        if dom == folder.parent and folder.name.casefold() == folder_name.casefold():
+        if dom == folder.parent and _key(folder.name) == _key(folder_name):
             tmp = folder.with_name(f".psyset-{uuid.uuid4().hex}")  # case-only rename, safe on
             folder.rename(tmp)                                     # case-insensitive filesystems
             tmp.rename(target)

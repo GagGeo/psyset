@@ -24,7 +24,9 @@ def test_sanitize_windows_chars():
     assert manage.sanitize_folder_name("lpt1.txt") == "lpt1.txt_"
     assert manage.sanitize_folder_name("name. ") == "name"
     assert manage.sanitize_folder_name("a\tb") == "a-b"
-    for bad in ("   ", "..", ""):
+    assert manage.sanitize_folder_name(".hidden") == "hidden"
+    assert manage.sanitize_folder_name("..x") == "x"
+    for bad in ("   ", "..", ".", ""):
         with pytest.raises(InvalidName):
             manage.sanitize_folder_name(bad)
 
@@ -158,3 +160,34 @@ def test_starter_library_fr(tmp_path):
     (root / "Mémoire" / "keep.txt").write_text("x")
     manage.create_starter_library(root, "fr")
     assert (root / "Mémoire" / "keep.txt").read_text() == "x"
+
+
+def test_add_test_nfd_existing_folder_is_a_collision_and_untouched(make_lib, tmp_path):
+    import unicodedata
+    nfd, nfc = (unicodedata.normalize(f, "\u00c9preuve") for f in ("NFD", "NFC"))
+    root = make_lib({"Att": {nfd: ["test.pdf"]}})
+    with pytest.raises(AlreadyExists):
+        manage.add_test(root, "Att", nfc, "", "", [("", pdf(tmp_path / "s.pdf"))], [], None, [])
+    assert [p.name for p in (root / "Att").iterdir()] == [nfd]
+    assert (root / "Att" / nfd / "test.pdf").exists()
+
+
+def test_add_test_failure_never_removes_preexisting_folder(make_lib, tmp_path, monkeypatch):
+    root = make_lib({"Att": {"T": ["test.pdf"]}})
+    monkeypatch.setattr(manage, "_find_entry", lambda *a, **k: None)  # simulate an undetected clash
+    with pytest.raises(FileExistsError):
+        manage.add_test(root, "Att", "T", "", "", [("", pdf(tmp_path / "s.pdf"))], [], None, [])
+    assert (root / "Att" / "T" / "test.pdf").exists()
+
+
+def test_update_info_keeps_folder_name_when_display_name_unchanged(make_lib):
+    root = make_lib({"Att": {"hand-renamed": ["test.pdf"]}})
+    folder = root / "Att" / "hand-renamed"
+    manage.write_info(folder, "RL/RI 16: long", "", "")
+    new = manage.update_info(folder, root, "RL/RI 16: long", "new ref", "", "Att")
+    assert new == folder and read_info(new)["reference"] == "new ref"
+    # no psyset.json: display name defaults to the folder name
+    bare = make_lib({"Att": {"Bare": ["test.pdf"]}})
+    assert manage.update_info(bare / "Att" / "Bare", bare, "Bare", "r", "", "Att") == bare / "Att" / "Bare"
+    moved = manage.update_info(folder, root, "RL/RI 16: long", "x", "", "Memoire")
+    assert moved == root / "Memoire" / "hand-renamed"
