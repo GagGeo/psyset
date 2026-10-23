@@ -129,3 +129,40 @@ def test_info_with_bom(make_lib):
         b"\xef\xbb\xbf" + json.dumps({"name": "Z", "subdomain": "S"}).encode())
     t = one(root)
     assert (t.name, t.subdomain, t.has_info) == ("Z", "S", True)
+
+
+def test_natural_key_non_decimal_digits():
+    from psyset.library import natural_key
+    assert sorted(["10", "1²", "2"], key=natural_key) == ["1²", "2", "10"]  # "²" is no number
+
+
+def test_system_files_ignored(make_lib):
+    t = one(make_lib({"Exec": {"tmt": ["test.pdf", "Thumbs.db", "DESKTOP.INI", "Icon\r"]}}))
+    assert t.unclassified == [] and list(t.sheets) == [""]
+
+
+@pytest.fixture
+def locked(request):
+    """chmod 000 a folder; permissions are restored at teardown."""
+    import os
+    done = []
+
+    def lock(path):
+        os.chmod(path, 0)
+        done.append(path)
+    yield lock
+    for p in reversed(done):  # a locked parent first would block its children
+        os.chmod(p, 0o755)
+
+
+def test_unreadable_folders_skipped(make_lib, locked):
+    root = make_lib({"Exec": {"tmt": ["test.pdf"], "locked": ["test.pdf"]},
+                     "Hidden drive dir": {"x": ["test.pdf"]}})
+    locked(root / "Exec" / "locked")
+    locked(root / "Hidden drive dir")
+    assert [(i.domain, i.name) for i in scan_library(root)] == [("Exec", "tmt")]
+    from psyset.ui.dialogs import library_problem
+    assert library_problem({"library": str(root)}) is None
+    locked(root)  # the root itself unreadable: still a library problem
+    with pytest.raises(OSError):
+        scan_library(root)

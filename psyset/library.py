@@ -6,6 +6,7 @@ from pathlib import Path
 
 SUPPORTED = {".pdf", ".doc", ".docx", ".odt"}
 INFO_FILE = "psyset.json"
+SYSTEM_FILES = {"thumbs.db", "desktop.ini", "icon\r"}  # OS clutter: neither a role nor unclassified
 _ROLE = re.compile(r"(test|rating)(?:-(.+))?", re.I)
 
 
@@ -15,7 +16,7 @@ class LibraryMissing(Exception):
 
 def natural_key(s: str) -> list:
     """Sort key: digit runs compare as numbers and come before letters ("2" < "10" < "A")."""
-    return [(0, int(p)) if p.isdigit() else (1, p)
+    return [(0, int(p)) if p.isdecimal() else (1, p)
             for p in re.split(r"(\d+)", s.casefold()) if p]
 
 
@@ -62,13 +63,26 @@ def _subdirs(path: Path) -> list[Path]:
                   key=lambda p: p.name)
 
 
+def _readable_subdirs(path: Path) -> list[Path]:
+    """Subfolders of a domain; an unreadable one (System Volume Information…) has none."""
+    try:
+        return _subdirs(path)
+    except OSError:
+        return []
+
+
 def list_domains(root: Path) -> list[str]:
     if not root.is_dir():
         raise LibraryMissing(str(root))
     return [p.name for p in _subdirs(root)]
 
 
-def _scan_test(folder: Path, domain: str) -> Instrument:
+def _scan_test(folder: Path, domain: str) -> Instrument | None:
+    """None if the folder cannot be read: it is skipped, the rest of the library still loads."""
+    try:
+        files = sorted((f for f in folder.iterdir() if f.is_file()), key=lambda p: p.name)
+    except OSError:
+        return None
     info = read_info(folder)
     inst = Instrument(folder=folder, domain=domain, name=folder.name, has_info=info is not None)
     if info:
@@ -76,8 +90,9 @@ def _scan_test(folder: Path, domain: str) -> Instrument:
         inst.name = text("name") or folder.name
         inst.reference = text("reference")
         inst.subdomain = text("subdomain")
-    for f in sorted(folder.iterdir(), key=lambda p: p.name):
-        if (not f.is_file() or f.name.startswith((".", "~$")) or f.name == INFO_FILE):
+    for f in files:
+        if (f.name.startswith((".", "~$")) or f.name == INFO_FILE
+                or f.name.casefold() in SYSTEM_FILES):
             continue
         stem, ext = f.stem.casefold(), f.suffix.lower()
         m = _ROLE.fullmatch(f.stem)
@@ -107,7 +122,8 @@ def _scan_test(folder: Path, domain: str) -> Instrument:
 def scan_library(root: Path) -> list[Instrument]:
     if not root.is_dir():
         raise LibraryMissing(str(root))
-    found = [_scan_test(t, d.name) for d in _subdirs(root) for t in _subdirs(d)]
+    found = [i for d in _subdirs(root) for t in _readable_subdirs(d)
+             if (i := _scan_test(t, d.name))]
     found.sort(key=lambda i: (i.domain.casefold(), i.subdomain == "",
                               i.subdomain.casefold(), i.name.casefold()))
     return found
