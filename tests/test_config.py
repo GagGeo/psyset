@@ -44,3 +44,27 @@ def test_config_path_per_platform(monkeypatch):
     monkeypatch.setattr(sys, "platform", "linux")
     monkeypatch.setattr(os, "name", "posix")
     assert config._config_dir().replace("\\", "/").endswith(".config/PsySet")
+
+
+def test_save_config_non_serialisable_never_raises(tmp_path, monkeypatch):
+    p = tmp_path / "config.json"
+    monkeypatch.setattr(config, "config_path", lambda: p)
+    config.save_config({"lang": "fr"})
+    config.save_config({"library": tmp_path})  # a Path: TypeError inside json.dumps
+    loop = {}
+    loop["self"] = loop
+    config.save_config(loop)  # circular reference: ValueError inside json.dumps
+    assert config.load_config() == {"lang": "fr"}  # old file intact
+
+
+def test_save_config_keeps_old_file_on_write_failure(tmp_path, monkeypatch):
+    p = tmp_path / "config.json"
+    monkeypatch.setattr(config, "config_path", lambda: p)
+    config.save_config({"lang": "fr"})
+
+    def boom(src, dst):
+        raise OSError("disk full")
+    monkeypatch.setattr(config.os, "replace", boom)
+    config.save_config({"lang": "en"})
+    assert config.load_config() == {"lang": "fr"}
+    assert [f.name for f in tmp_path.iterdir()] == ["config.json"]  # no temp file left

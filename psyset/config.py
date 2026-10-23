@@ -2,6 +2,7 @@
 import json
 import os
 import sys
+import tempfile
 from pathlib import Path
 
 APP_NAME = "PsySet"
@@ -28,9 +29,22 @@ def load_config() -> dict:
 
 
 def save_config(cfg: dict) -> None:
+    """Write atomically (temp file + os.replace): a failure leaves the old file intact."""
+    tmp = None
     try:
+        text = json.dumps(cfg, indent=2, ensure_ascii=False)
         p = config_path()
         p.parent.mkdir(parents=True, exist_ok=True)
-        p.write_text(json.dumps(cfg, indent=2, ensure_ascii=False), encoding="utf-8")
-    except OSError:
+        fd, tmp = tempfile.mkstemp(dir=p.parent, prefix=".config-", suffix=".tmp")
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            f.write(text)
+        os.replace(tmp, p)
+        tmp = None
+    except (OSError, TypeError, ValueError):
         pass  # preferences must never block the app
+    finally:
+        if tmp:
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
