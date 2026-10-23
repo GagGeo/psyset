@@ -130,6 +130,8 @@ fichiers avec étiquette A, B… pour les feuilles et CRF). Les fichiers sont
 **copiés** dans la bibliothèque sous leur nom standard ; vos originaux restent
 où ils sont. « Modifier » rouvre le formulaire ; « Supprimer le test » envoie
 le dossier à la **Corbeille** — rien n'est jamais supprimé définitivement.
+Exception sous Windows : un lecteur réseau ou amovible (clé USB) n'a souvent
+pas de Corbeille, et y « mettre à la Corbeille » peut alors être définitif.
 
 ## 100 % local
 
@@ -142,7 +144,7 @@ fichiers de tests, sur votre ordinateur.
 
 Application Python/tkinter : point d'entrée [`PsySet.py`](PsySet.py), code dans
 [`psyset/`](psyset), logos et icônes dans [`assets/`](assets). Dépendances :
-`pypdf` et `send2trash`.
+`pypdf`, `send2trash` et `cryptography` (PDF protégés des éditeurs).
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt

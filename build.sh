@@ -10,13 +10,18 @@ if [[ ! -x "$PYINSTALLER" ]]; then
   exit 1
 fi
 
-# Dépendances d'exécution (pypdf, send2trash) dans le venv de PyInstaller uniquement.
+# Dépendances d'exécution (pypdf, send2trash, cryptography) dans le venv de PyInstaller uniquement.
 "$HOME/venvs/pyinstaller_env/bin/pip" install -q -r requirements.txt
 
-"$PYINSTALLER" --windowed --noconfirm --name "PsySet" \
+# --clean : une analyse en cache, faite avant l'installation d'une dépendance, l'omettrait.
+"$PYINSTALLER" --clean --windowed --noconfirm --name "PsySet" \
   --icon assets/psyset.icns \
   --add-data "assets:assets" \
   PsySet.py
+
+# Sans cryptography, les PDF protégés (AES) des éditeurs seraient illisibles.
+find dist/PsySet.app -path '*cryptography*' -name '*.so' | grep -q . \
+  || { echo "cryptography not bundled"; exit 1; }
 
 # macOS affiche « PsySet souhaite contrôler Word » : on y joint une explication.
 PLIST="dist/PsySet.app/Contents/Info.plist"

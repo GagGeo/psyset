@@ -125,7 +125,9 @@ domain, subdomain, and one file per role; several labelled files A, B… for
 sheets and CRFs). Files are **copied** into the library under their standard
 names; your originals stay where they are. "Edit info" reopens the form; "Remove
 test" sends the folder to the **Trash / Recycle Bin**: nothing is ever
-permanently deleted.
+permanently deleted. Exception on Windows: a network or removable drive (USB
+stick) often has no Recycle Bin, so "moving to the Recycle Bin" can be
+permanent there.
 
 ## 100% local
 
@@ -138,7 +140,7 @@ your computer.
 
 Python/tkinter app: entry point [`PsySet.py`](PsySet.py), code in
 [`psyset/`](psyset), logos and icons in [`assets/`](assets). Dependencies:
-`pypdf` and `send2trash`.
+`pypdf`, `send2trash` and `cryptography` (publishers' protected PDFs).
 
 ```bash
 python3 -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
