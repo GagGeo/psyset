@@ -1,0 +1,63 @@
+name: Build apps
+
+permissions:
+  contents: write
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  macos:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest pyinstaller
+      - run: pytest -q
+      - run: >
+          pyinstaller --windowed --noconfirm --target-arch universal2
+          --name "PsySet" --icon assets/psyset.icns
+          --add-data "assets:assets"
+          PsySet.py
+      - run: >
+          plutil -replace NSAppleEventsUsageDescription -string
+          "PsySet utilise Word pour convertir vos documents en PDF. / PsySet uses Word to convert your documents to PDF."
+          dist/PsySet.app/Contents/Info.plist
+      - run: codesign --force --deep -s - dist/PsySet.app
+      - run: ditto -c -k --keepParent "dist/PsySet.app" "PsySet-macOS.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PsySet-macOS
+          path: PsySet-macOS.zip
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: PsySet-macOS.zip
+
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt pytest pyinstaller
+      - run: pytest -q
+      - run: >
+          pyinstaller --windowed --onefile --noconfirm
+          --name "PsySet" --icon assets/psyset.ico
+          --add-data "assets;assets"
+          PsySet.py
+      - run: Compress-Archive -Path "dist/PsySet.exe" -DestinationPath "PsySet-Windows.zip"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: PsySet-Windows
+          path: PsySet-Windows.zip
+      - uses: softprops/action-gh-release@v2
+        if: startsWith(github.ref, 'refs/tags/')
+        with:
+          files: PsySet-Windows.zip
