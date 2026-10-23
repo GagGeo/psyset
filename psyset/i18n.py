@@ -17,6 +17,7 @@ STRINGS = {
         "settings_change_lib": "Changer le dossier de la bibliothèque…",
         "settings_open_lib": "Ouvrir le dossier de la bibliothèque",
         # --- domains pane
+        "domains_label": "DOMAINES",
         "all_tests": "Tous les tests",
         "add_test": "＋ Ajouter un test",
         # --- tests pane
@@ -25,7 +26,7 @@ STRINGS = {
         "no_results": "Aucun test trouvé.",
         "tag_sheet": "FEUILLE",
         "tag_crf": "CRF",
-        "tag_instr": "CONSIGNES",
+        "tag_instr": "CONSIG.",
         "tag_norms": "NORMES",
         # --- detail box
         "detail_reference": "RÉFÉRENCE",
@@ -71,6 +72,7 @@ STRINGS = {
         "btn_reveal": "Afficher dans le Finder / l'Explorateur",
         "btn_close": "Fermer",
         "err_title": "Erreur",
+        "err_open": "Impossible d'ouvrir {file} :\n{reason}",
         "err_conversion": "Impossible de convertir {file} :\n{reason}\n\nRien n'a été écrit.",
         "err_pdf_read": "Impossible de lire {file}.\n\nRien n'a été écrit.",
         "err_output": "Impossible d'écrire {file} :\n{reason}\n\nRien n'a été écrit.",
@@ -133,6 +135,7 @@ STRINGS = {
         "settings_change_lib": "Change library folder…",
         "settings_open_lib": "Open library folder",
         # --- domains pane
+        "domains_label": "DOMAINS",
         "all_tests": "All tests",
         "add_test": "＋ Add a test",
         # --- tests pane
@@ -187,6 +190,7 @@ STRINGS = {
         "btn_reveal": "Show in Finder / Explorer",
         "btn_close": "Close",
         "err_title": "Error",
+        "err_open": "Could not open {file}:\n{reason}",
         "err_conversion": "Could not convert {file}:\n{reason}\n\nNothing was written.",
         "err_pdf_read": "Could not read {file}.\n\nNothing was written.",
         "err_output": "Could not write {file}:\n{reason}\n\nNothing was written.",
