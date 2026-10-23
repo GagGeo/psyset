@@ -1,0 +1,112 @@
+"""Scan the tests library: domain/test folders -> Instrument records."""
+import json
+import re
+from dataclasses import dataclass, field
+from pathlib import Path
+
+SUPPORTED = {".pdf", ".doc", ".docx", ".odt"}
+INFO_FILE = "psyset.json"
+_ROLE = re.compile(r"(test|rating)(?:-(.+))?", re.I)
+
+
+class LibraryMissing(Exception):
+    pass
+
+
+def natural_key(s: str) -> list:
+    """Sort key: digit runs compare as numbers and come before letters ("2" < "10" < "A")."""
+    return [(0, int(p)) if p.isdigit() else (1, p)
+            for p in re.split(r"(\d+)", s.casefold()) if p]
+
+
+@dataclass
+class Instrument:  # not "Test*": pytest would try to collect it
+    folder: Path
+    domain: str
+    name: str
+    reference: str = ""
+    subdomain: str = ""
+    has_info: bool = False
+    sheets: dict[str, Path] = field(default_factory=dict)  # label -> path; "" = unlabelled
+    crfs: dict[str, Path] = field(default_factory=dict)
+    instructions: list[Path] = field(default_factory=list)
+    norms: list[Path] = field(default_factory=list)
+    unclassified: list[Path] = field(default_factory=list)
+    unsupported: list[Path] = field(default_factory=list)  # sheet/crf role, format not in SUPPORTED
+    duplicates: list[Path] = field(default_factory=list)  # same role+label, losing file (PDF wins)
+
+    def versions(self) -> list[str]:
+        labels = {k for k in (*self.sheets, *self.crfs) if k}
+        return sorted(labels, key=natural_key)
+
+    def key(self, root: Path) -> str:
+        return self.folder.relative_to(root).as_posix()
+
+
+def read_info(folder: Path) -> dict | None:
+    try:
+        data = json.loads((folder / INFO_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def write_info(folder: Path, name: str, reference: str, subdomain: str) -> None:
+    data = {"name": name, "reference": reference, "subdomain": subdomain}
+    (folder / INFO_FILE).write_text(
+        json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
+def _subdirs(path: Path) -> list[Path]:
+    return sorted((p for p in path.iterdir() if p.is_dir() and not p.name.startswith(".")),
+                  key=lambda p: p.name)
+
+
+def list_domains(root: Path) -> list[str]:
+    if not root.is_dir():
+        raise LibraryMissing(str(root))
+    return [p.name for p in _subdirs(root)]
+
+
+def _scan_test(folder: Path, domain: str) -> Instrument:
+    info = read_info(folder)
+    inst = Instrument(folder=folder, domain=domain, name=folder.name, has_info=info is not None)
+    if info:
+        inst.name = info.get("name") or folder.name
+        inst.reference = info.get("reference") or ""
+        inst.subdomain = info.get("subdomain") or ""
+    for f in sorted(folder.iterdir(), key=lambda p: p.name):
+        if (not f.is_file() or f.name.startswith((".", "~$")) or f.name == INFO_FILE):
+            continue
+        stem, ext = f.stem.casefold(), f.suffix.lower()
+        m = _ROLE.fullmatch(f.stem)
+        if m:
+            if ext not in SUPPORTED:
+                inst.unsupported.append(f)
+                continue
+            slots = inst.sheets if m.group(1).lower() == "test" else inst.crfs
+            label = m.group(2) or ""
+            old = slots.get(label)
+            if old is None:
+                slots[label] = f
+            elif ext == ".pdf" and old.suffix.lower() != ".pdf":
+                inst.duplicates.append(old)
+                slots[label] = f
+            else:
+                inst.duplicates.append(f)
+        elif stem.startswith("instruction"):
+            inst.instructions.append(f)
+        elif stem.startswith("norm"):
+            inst.norms.append(f)
+        else:
+            inst.unclassified.append(f)
+    return inst
+
+
+def scan_library(root: Path) -> list[Instrument]:
+    if not root.is_dir():
+        raise LibraryMissing(str(root))
+    found = [_scan_test(t, d.name) for d in _subdirs(root) for t in _subdirs(d)]
+    found.sort(key=lambda i: (i.domain.casefold(), i.subdomain == "",
+                              i.subdomain.casefold(), i.name.casefold()))
+    return found
