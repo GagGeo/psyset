@@ -175,7 +175,7 @@ def update_info(folder: Path, root: Path, name: str, reference: str,
     if _find_entry(dom, folder_name, exclude=folder):  # the folder itself is no clash ("TMT" -> "tmt")
         raise AlreadyExists(folder_name)
     target = dom / folder_name
-    if target != folder:
+    if str(target) != str(folder):  # not Path !=: WindowsPath equality ignores case ("TMT" -> "tmt")
         new_domain = not dom.exists()
         dom.mkdir(parents=True, exist_ok=True)
         try:
@@ -222,7 +222,7 @@ def assign_role(path: Path, role: str, label: str = "") -> Path:
     target = path.parent / _target_name(path.parent, role, _clean_label(label), path.suffix.lower())
     if _find_entry(path.parent, target.name, exclude=path):
         raise AlreadyExists(target.name)
-    if target != path:
+    if str(target) != str(path):  # WindowsPath equality ignores case
         os.rename(path, target)
     return target
 

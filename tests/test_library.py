@@ -1,4 +1,5 @@
 import json
+import sys
 
 import pytest
 
@@ -137,7 +138,8 @@ def test_natural_key_non_decimal_digits():
 
 
 def test_system_files_ignored(make_lib):
-    t = one(make_lib({"Exec": {"tmt": ["test.pdf", "Thumbs.db", "DESKTOP.INI", "Icon\r"]}}))
+    clutter = ["Thumbs.db", "DESKTOP.INI"] + ([] if sys.platform == "win32" else ["Icon\r"])
+    t = one(make_lib({"Exec": {"tmt": ["test.pdf", *clutter]}}))
     assert t.unclassified == [] and list(t.sheets) == [""]
 
 
@@ -155,6 +157,7 @@ def locked(request):
         os.chmod(p, 0o755)
 
 
+@pytest.mark.skipif(sys.platform == "win32", reason="chmod cannot lock a folder on Windows")
 def test_unreadable_folders_skipped(make_lib, locked):
     root = make_lib({"Exec": {"tmt": ["test.pdf"], "locked": ["test.pdf"]},
                      "Hidden drive dir": {"x": ["test.pdf"]}})

@@ -1,3 +1,4 @@
+import sys
 from pathlib import Path
 
 import pytest
@@ -116,7 +117,8 @@ def test_build_jobs_same_file_differing_in_case(tmp_path):
     for platform in ("darwin", "win32"):
         with pytest.raises(ValueError):
             build_jobs(plan, chosen, platform)
-    assert len(build_jobs(plan, chosen, "linux")) == 2
+    if sys.platform != "win32":  # Windows paths are never case-sensitive
+        assert len(build_jobs(plan, chosen, "linux")) == 2
 
 
 def test_in_library(tmp_path):
@@ -128,4 +130,5 @@ def test_in_library(tmp_path):
     assert in_library(tmp_path / "other" / ".." / "Tests Lib" / "x.pdf", lib)
     assert not in_library(tmp_path / "Tests Library" / "x.pdf", lib)  # a sibling, not inside
     assert not in_library(tmp_path / "out.pdf", lib)
-    assert not in_library(tmp_path / "tests lib" / "x.pdf", lib, "linux")
+    if sys.platform != "win32":  # Windows paths are never case-sensitive
+        assert not in_library(tmp_path / "tests lib" / "x.pdf", lib, "linux")
