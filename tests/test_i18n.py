@@ -29,3 +29,7 @@ def test_placeholders_match_between_languages():
         return {f for _, f, _, _ in string.Formatter().parse(s) if f}
     for key in STRINGS["en"]:
         assert fields(STRINGS["fr"][key]) == fields(STRINGS["en"][key]), key
+
+
+def test_duplicate_reason_does_not_claim_a_pdf():
+    assert "PDF" not in t("en", "reason_duplicate") and "PDF" not in t("fr", "reason_duplicate")

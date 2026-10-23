@@ -10,6 +10,7 @@ from psyset.config import save_config
 from psyset.convert import ConversionError, NoConverter, OutputError, find_converters, generate
 from psyset.i18n import t
 from psyset.library import Instrument, natural_key
+from psyset.manage import _key
 from psyset.pdf import PdfReadError, estimate
 from psyset.platform import open_path, reveal_path
 from psyset.session import Entry, crfs_for, default_filename, default_versions, missing, \
@@ -65,11 +66,24 @@ def kinds_to_save(plan: dict[str, list[Path]], outputs: dict[str, bool]) -> list
     return [k for k in KINDS if outputs.get(k) and plan[k]]
 
 
-def build_jobs(plan: dict[str, list[Path]], chosen: dict[str, Path]) -> dict[Path, list[Path]]:
+def _parts(path, platform: str) -> tuple:
+    """Comparable path: resolved; ignoring case (and NFC/NFD) where the filesystem does."""
+    parts = Path(path).resolve().parts
+    return tuple(_key(p) for p in parts) if platform in ("darwin", "win32") else parts
+
+
+def in_library(dest, library, platform: str = sys.platform) -> bool:
+    """Is `dest` inside the tests library? A PDF saved there could replace a document."""
+    lib = _parts(library, platform)
+    return _parts(dest, platform)[:len(lib)] == lib
+
+
+def build_jobs(plan: dict[str, list[Path]], chosen: dict[str, Path],
+               platform: str = sys.platform) -> dict[Path, list[Path]]:
     """{destination: docs}; ValueError(path) if one file was chosen for two outputs."""
     jobs, seen = {}, set()
     for kind, dest in chosen.items():
-        same = Path(dest).resolve()
+        same = _parts(dest, platform)
         if same in seen:
             raise ValueError(Path(dest).resolve())
         seen.add(same)
@@ -104,7 +118,9 @@ def error_text(lang: str, exc: BaseException, jobs: dict[Path, list[Path]], libr
         first = next(iter(_non_pdfs(jobs)), Path("?"))
         return t(lang, "err_no_converter", file=_shown(first, library))
     if isinstance(exc, OutputError):
-        return t(lang, "err_output", file=str(exc.path), reason=exc.reason)
+        tail = (t(lang, "err_output_written", files="\n".join(map(str, exc.written)))
+                if exc.written else t(lang, "nothing_written"))
+        return t(lang, "err_output", file=str(exc.path), reason=exc.reason) + "\n\n" + tail
     return t(lang, "err_generic", reason=str(exc) or type(exc).__name__)
 
 
@@ -394,7 +410,8 @@ class SessionPane(ttk.Frame):
     # --------------------------------------------------------- generate --
     def _save_dir(self) -> str:
         d = self.cfg.get("last_save_dir")
-        return d if isinstance(d, str) and Path(d).is_dir() else str(Path.home())
+        ok = isinstance(d, str) and Path(d).is_dir() and not in_library(d, self.main.library)
+        return d if ok else str(Path.home())
 
     def generate(self) -> None:
         if self._running:
@@ -411,6 +428,10 @@ class SessionPane(ttk.Frame):
                 initialfile=default_filename(kind, self.lang, date.today()),
                 defaultextension=".pdf", filetypes=[("PDF", "*.pdf")])
             if not path:  # one cancel aborts the whole generation
+                return
+            if in_library(path, self.main.library):  # never written over a library document
+                messagebox.showerror(self._t("err_title"), self._t("err_in_library", file=path),
+                                     parent=self.main.root)
                 return
             chosen[kind] = Path(path)
             self.cfg["last_save_dir"] = str(Path(path).parent)

@@ -65,11 +65,13 @@ class NoConverter(Exception):
 
 
 class OutputError(Exception):
-    """A destination (or its temp file) could not be written."""
+    """A destination (or its temp file) could not be written. `written`: destinations
+    already replaced before the failure (empty when nothing was written)."""
 
-    def __init__(self, path, reason: str = ""):
+    def __init__(self, path, reason: str = "", written=()):
         self.path = Path(path)
         self.reason = reason
+        self.written = list(written)
         super().__init__(f"{self.path.name}: {reason}" if reason else self.path.name)
 
 
@@ -101,7 +103,11 @@ def find_converters() -> list[str]:
 
 
 def _run(cmd, **kw):
-    return subprocess.run(cmd, timeout=TIMEOUT, check=True, capture_output=True, text=True, **kw)
+    if os.name == "nt":  # no console window flashing up for each conversion
+        kw["creationflags"] = subprocess.CREATE_NO_WINDOW
+    # errors="replace": stderr may come in an OEM code page; stdin: a prompt fails, never waits
+    return subprocess.run(cmd, timeout=TIMEOUT, check=True, capture_output=True, text=True,
+                          errors="replace", stdin=subprocess.DEVNULL, **kw)
 
 
 def _word(src: Path, out_dir: Path) -> Path:
@@ -193,11 +199,13 @@ def generate(jobs: dict[Path, list[Path]], duplex: bool, convert=to_pdf) -> dict
                     raise
                 except OSError as e:
                     raise OutputError(dest, str(e)) from e
+        written: list[Path] = []
         for dest, name in tmp_of.items():
             try:
                 os.replace(name, dest)
             except OSError as e:
-                raise OutputError(dest, str(e)) from e
+                raise OutputError(dest, str(e), written) from e
+            written.append(dest)
         return pages
     finally:
         for name in temps:

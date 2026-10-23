@@ -34,7 +34,7 @@ STRINGS = {
         "detail_files": "AUTRES FICHIERS",
         "reason_unclassified": "non classé — cliquer pour attribuer un rôle",
         "reason_unsupported": "format non pris en charge ({ext}) — ignoré",
-        "reason_duplicate": "doublon — le PDF est utilisé",
+        "reason_duplicate": "doublon — un autre fichier de ce rôle est utilisé",
         "edit_info": "Modifier",
         "open_folder": "Ouvrir le dossier",
         "remove_test": "Supprimer le test",
@@ -80,7 +80,11 @@ STRINGS = {
         "err_pdf_read": "Impossible de lire {file} :\n{reason}\n\nRien n'a été écrit.",
         "err_same_file": "Le même fichier a été choisi pour deux PDF : {file}\n\nRien n'a été écrit.",
         "err_generic": "La génération a échoué :\n{reason}\n\nRien n'a été écrit.",
-        "err_output": "Impossible d'écrire {file} :\n{reason}\n\nRien n'a été écrit.",
+        "err_output": "Impossible d'écrire {file} :\n{reason}",
+        "err_output_written": "Ces PDF avaient déjà été écrits :\n{files}",
+        "nothing_written": "Rien n'a été écrit.",
+        "err_in_library": ("Les PDF ne peuvent pas être enregistrés dans la bibliothèque de tests :\n"
+                           "{file}\n\nChoisissez un autre dossier."),
         "err_no_converter": ("Microsoft Word ou LibreOffice est nécessaire pour convertir {file}, "
                              "et aucun des deux n'a été trouvé.\n\n"
                              "Installez l'un des deux, ou utilisez des fichiers PDF.\n\nRien n'a été écrit."),
@@ -172,7 +176,7 @@ STRINGS = {
         "detail_files": "OTHER FILES",
         "reason_unclassified": "unclassified — click to assign a role",
         "reason_unsupported": "unsupported format ({ext}) — skipped",
-        "reason_duplicate": "duplicate — the PDF is used",
+        "reason_duplicate": "duplicate — another file with this role is used",
         "edit_info": "Edit info",
         "open_folder": "Open folder",
         "remove_test": "Remove test",
@@ -218,7 +222,11 @@ STRINGS = {
         "err_pdf_read": "Could not read {file}:\n{reason}\n\nNothing was written.",
         "err_same_file": "The same file was chosen for two PDFs: {file}\n\nNothing was written.",
         "err_generic": "Generation failed:\n{reason}\n\nNothing was written.",
-        "err_output": "Could not write {file}:\n{reason}\n\nNothing was written.",
+        "err_output": "Could not write {file}:\n{reason}",
+        "err_output_written": "These PDFs had already been written:\n{files}",
+        "nothing_written": "Nothing was written.",
+        "err_in_library": ("PDFs cannot be saved inside the tests library:\n"
+                           "{file}\n\nChoose another folder."),
         "err_no_converter": ("Microsoft Word or LibreOffice is needed to convert {file}, "
                              "and neither was found.\n\n"
                              "Install one of them, or use PDF files.\n\nNothing was written."),

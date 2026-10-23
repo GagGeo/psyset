@@ -6,7 +6,8 @@ from psyset.convert import ConversionError, NoConverter, OutputError
 from psyset.library import Instrument
 from psyset.pdf import PdfReadError
 from psyset.ui.session_pane import (build_jobs, count_text, error_text, kinds_to_save,
-                                    needs_word_prompt, reorder, toggle_version, warning_lines)
+                                    in_library, needs_word_prompt, reorder, toggle_version,
+                                    warning_lines)
 
 
 def test_reorder_moves_down_and_up():
@@ -100,3 +101,31 @@ def test_error_text_names_the_file(tmp_path):
     msg = error_text("en", OutputError(tmp_path / "out.pdf", "denied"), jobs, lib)
     assert str(tmp_path / "out.pdf") in msg and "denied" in msg
     assert "disk full" in error_text("en", OSError("disk full"), jobs, lib)
+
+
+def test_error_text_output_says_what_was_written(tmp_path):
+    out, done = tmp_path / "b.pdf", tmp_path / "a.pdf"
+    msg = error_text("en", OutputError(out, "denied", [done]), {}, tmp_path)
+    assert str(out) in msg and str(done) in msg and "Nothing was written" not in msg
+    assert "Rien n'a été écrit" in error_text("fr", OutputError(out, "denied"), {}, tmp_path)
+
+
+def test_build_jobs_same_file_differing_in_case(tmp_path):
+    plan = {"sheets": [Path("t.pdf")], "crfs": [Path("r.pdf")]}
+    chosen = {"sheets": tmp_path / "Out.pdf", "crfs": tmp_path / "out.PDF"}
+    for platform in ("darwin", "win32"):
+        with pytest.raises(ValueError):
+            build_jobs(plan, chosen, platform)
+    assert len(build_jobs(plan, chosen, "linux")) == 2
+
+
+def test_in_library(tmp_path):
+    lib = tmp_path / "Tests Lib"
+    (lib / "Mem" / "TMT").mkdir(parents=True)
+    assert in_library(lib / "Mem" / "TMT" / "test.pdf", lib)
+    assert in_library(lib / "x.pdf", lib)
+    assert in_library(tmp_path / "tests lib" / "Mem" / "x.pdf", lib, "darwin")  # case-insensitive
+    assert in_library(tmp_path / "other" / ".." / "Tests Lib" / "x.pdf", lib)
+    assert not in_library(tmp_path / "Tests Library" / "x.pdf", lib)  # a sibling, not inside
+    assert not in_library(tmp_path / "out.pdf", lib)
+    assert not in_library(tmp_path / "tests lib" / "x.pdf", lib, "linux")

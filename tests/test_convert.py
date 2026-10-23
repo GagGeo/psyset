@@ -156,3 +156,34 @@ def test_generate_unreadable_converted_pdf_names_the_original(tmp_path):
         generate({a: [x]}, duplex=False, convert=garbage)
     assert e.value.path == x
     assert not a.exists()
+
+
+def test_run_never_waits_on_stdin_and_tolerates_any_encoding(monkeypatch):
+    seen = {}
+    monkeypatch.setattr(subprocess, "run", lambda cmd, **kw: seen.update(kw))
+    monkeypatch.setattr(convert.os, "name", "posix")
+    convert._run(["soffice"])
+    assert seen["errors"] == "replace" and seen["text"] is True
+    assert seen["stdin"] is subprocess.DEVNULL and "creationflags" not in seen
+    monkeypatch.setattr(convert.os, "name", "nt")
+    monkeypatch.setattr(subprocess, "CREATE_NO_WINDOW", 0x08000000, raising=False)
+    convert._run(["powershell"])
+    assert seen["creationflags"] == 0x08000000
+
+
+def test_generate_replace_failure_lists_what_was_written(tmp_path, monkeypatch):
+    good = pdf(tmp_path / "good.pdf")
+    a, b = tmp_path / "a.pdf", tmp_path / "b.pdf"
+    real = convert.os.replace
+
+    def second_fails(src, dst):
+        if dst == b:
+            raise PermissionError(13, "open in a viewer")
+        real(src, dst)
+    monkeypatch.setattr(convert.os, "replace", second_fails)
+    with pytest.raises(OutputError) as e:
+        generate({a: [good], b: [good]}, duplex=False)
+    assert e.value.path == b and e.value.written == [a]
+    with pytest.raises(OutputError) as e:  # failing before any replace: nothing written
+        generate({tmp_path / "no" / "c.pdf": [good]}, duplex=False)
+    assert e.value.written == []
