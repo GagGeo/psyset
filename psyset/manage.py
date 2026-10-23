@@ -62,19 +62,17 @@ def _labels(items: list[tuple[str, Path]]) -> list[tuple[str, Path]]:
     return out
 
 
+def holds_role(f: Path, role: str, label: str = "") -> bool:
+    """Does file `f` hold `role` (+ sanitized `label`), any extension? put_file replaces such files."""
+    if role in ("test", "rating"):
+        m = _ROLE.fullmatch(f.stem)
+        return bool(m) and m.group(1).lower() == role and _key(m.group(2) or "") == _key(label)
+    return _key(f.stem) == role
+
+
 def _matching(folder: Path, role: str, label: str) -> list[Path]:
     """Files already holding `role` (+ `label`) in `folder`, any extension."""
-    found = []
-    for f in folder.iterdir():
-        if not f.is_file():
-            continue
-        if role in ("test", "rating"):
-            m = _ROLE.fullmatch(f.stem)
-            if m and m.group(1).lower() == role and _key(m.group(2) or "") == _key(label):
-                found.append(f)
-        elif _key(f.stem) == role:
-            found.append(f)
-    return found
+    return [f for f in folder.iterdir() if f.is_file() and holds_role(f, role, label)]
 
 
 def _clean_label(label: str) -> str:

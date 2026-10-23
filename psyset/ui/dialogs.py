@@ -1,14 +1,17 @@
 """Dialogs: first launch / library choice, test form (add / edit), assign role, remove."""
+import os
 import sys
 import tkinter as tk
+import uuid
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from psyset import manage
 from psyset.config import save_config
 from psyset.i18n import t
-from psyset.library import SUPPORTED, Instrument, LibraryMissing, list_domains, scan_library
-from psyset.manage import AlreadyExists, InvalidName, _key, sanitize_folder_name
+from psyset.library import (_ROLE, SUPPORTED, Instrument, LibraryMissing, list_domains,
+                             scan_library)
+from psyset.manage import AlreadyExists, InvalidName, _key, holds_role, sanitize_folder_name
 from psyset.ui.theme import C, Fonts, setup_styles
 
 # role -> (title key, several files allowed); test/rating files carry version labels
@@ -49,9 +52,8 @@ def library_problem(cfg: dict) -> str | None:
     return None
 
 
-def form_error(lang: str, name: str, domain: str, labels: dict[str, list[str]]) -> str | None:
-    """First validation message for the test form, or None. `labels`: role title key ->
-    final labels of that role's files (only checked when the role has several files)."""
+def form_error(lang: str, name: str, domain: str) -> str | None:
+    """Validation message for the test form's name and domain, or None."""
     if not name.strip():
         return t(lang, "err_name_empty")
     if not domain.strip():
@@ -61,21 +63,56 @@ def form_error(lang: str, name: str, domain: str, labels: dict[str, list[str]]) 
         sanitize_folder_name(domain)
     except InvalidName:
         return t(lang, "err_name_invalid")
-    for role_key, items in labels.items():
-        if len(items) < 2:
-            continue
-        seen = set()
-        for label in items:
-            if not label.strip():
-                return t(lang, "err_label_empty", role=t(lang, role_key))
-            try:
-                k = _key(sanitize_folder_name(label))  # same rule as manage
-            except InvalidName:
-                return t(lang, "err_label_invalid", label=label)
-            if k in seen:
-                return t(lang, "err_label_dup", label=label.strip(), role=t(lang, role_key))
-            seen.add(k)
     return None
+
+
+def role_labels(files, role: str) -> list[str]:
+    """Version labels that `files` hold for `role` ("" = unlabelled)."""
+    return [m.group(2) or "" for f in files
+            if (m := _ROLE.fullmatch(f.stem)) and m.group(1).lower() == role]
+
+
+def _clean(label: str) -> str:
+    try:
+        return sanitize_folder_name(label) if label else ""
+    except InvalidName:
+        return label
+
+
+def plan_files(lang: str, role: str, rows: list[dict], others: list[Path]):
+    """What saving does to one role's files, decided before anything is written.
+    rows: {"path": existing file | None, "src": picked file | None, "current": its label on
+    disk, "label": label typed}. others: files of the test folder the form does not list.
+    Returns (ops, error): ops are ("put", src, label, replaced file | None) and
+    ("rename", path, label); error is the message that must stop the save, or None."""
+    labelled, n = role in LABELLED, len(rows)
+    finals = [(r["label"].strip() if n > 1 else r["current"]) if labelled else "" for r in rows]
+    keys = []
+    for f in finals:
+        try:
+            keys.append(_key(sanitize_folder_name(f)) if f else "")  # manage's rule
+        except InvalidName:
+            keys.append(None)
+    title = t(lang, SECTIONS[role][0])
+    ops = []
+    for i, (r, final) in enumerate(zip(rows, finals)):
+        relabel = labelled and (r["path"] is None or final != r["current"])
+        if relabel:  # only labels that change are checked: an odd existing state never blocks
+            if n > 1 and not final:
+                return [], t(lang, "err_label_empty", role=title)
+            if keys[i] is None:
+                return [], t(lang, "err_label_invalid", label=final)
+            if keys[i] in keys[:i] + keys[i + 1:]:
+                return [], t(lang, "err_label_dup", label=final, role=title)
+        if (relabel or r["src"]) and role != "norms":  # norms never replace anything
+            clash = next((o for o in others if holds_role(o, role, _clean(final))), None)
+            if clash:
+                return [], t(lang, "err_hidden_file", file=clash.name)
+        if r["src"]:
+            ops.append(("put", r["src"], final, r["path"]))
+        elif r["path"] and final != r["current"]:
+            ops.append(("rename", r["path"], final))
+    return ops, None
 
 
 # -------------------------------------------------------------------- helpers --
@@ -298,12 +335,12 @@ class TestForm(tk.Toplevel):
         self.sub_var = tk.StringVar(self, value=inst.subdomain if inst else "")
         # one row per file: existing `path` and/or picked `src`, version `label` (+ its `current`)
         self.rows: dict[str, list[dict]] = {role: [] for role in SECTIONS}
+        # labels held by files the form does not list (unsupported formats, duplicates)
+        self._hidden = {role: role_labels([*inst.unsupported, *inst.duplicates], role) if inst
+                        else [] for role in LABELLED}
         if inst:
             for role, files in (("test", inst.sheets), ("rating", inst.crfs)):
                 self.rows[role] = [self._row(p, None, lbl) for lbl, p in files.items()]
-                for r in self.rows[role]:  # an unlabelled file gets one if a version is added
-                    if not r["label"].get():
-                        r["label"].set(next_label(x["label"].get() for x in self.rows[role]))
             self.rows["instructions"] = [self._row(p, None) for p in inst.instructions]
             self.rows["norms"] = [self._row(p, None) for p in inst.norms]
 
@@ -420,9 +457,11 @@ class TestForm(tk.Toplevel):
 
     def add_files(self, role: str) -> None:
         rows = self.rows[role]
+        used = lambda: [*(r["label"].get() for r in rows), *self._hidden.get(role, [])]
         for src in self._ask(role, SECTIONS[role][1]):
-            label = next_label(r["label"].get() for r in rows) if role in LABELLED else ""
-            rows.append(self._row(None, src, label))
+            if role in LABELLED and len(rows) == 1 and not rows[0]["label"].get():
+                rows[0]["label"].set(next_label(used()))  # a version is added: label the lone file
+            rows.append(self._row(None, src, next_label(used()) if role in LABELLED else ""))
         self._render(role)
 
     def replace(self, role: str, row: dict) -> None:
@@ -446,36 +485,44 @@ class TestForm(tk.Toplevel):
         self.rows[role].remove(row)
         self._render(role)
 
-    def _final(self, role: str, row: dict) -> str:
-        """Label the file is saved under: none for a lone new file, a lone existing file keeps its own."""
-        if role not in LABELLED:
-            return ""
-        if len(self.rows[role]) > 1:
-            return row["label"].get().strip()
-        return row["current"]
+    def _plain(self, row: dict) -> dict:
+        return {**row, "label": row["label"].get()}
+
+    def _others(self) -> list[Path]:
+        """Files of the test folder that the form does not list."""
+        if self.inst is None:
+            return []
+        listed = {r["path"] for rows in self.rows.values() for r in rows}
+        try:
+            return [f for f in self.inst.folder.iterdir() if f.is_file() and f not in listed]
+        except OSError:
+            return []
 
     # --------------------------------------------------------------- save --
     def save(self) -> None:
         name, domain = self.name_var.get().strip(), self.domain_var.get().strip()
         subdomain, reference = self.sub_var.get().strip(), self.ref_text.get("1.0", "end-1c").strip()
-        err = form_error(self.lang, name, domain,
-                         {SECTIONS[role][0]: [self._final(role, r) for r in self.rows[role]]
-                          for role in LABELLED})
+        err, plans = form_error(self.lang, name, domain), {}
+        others = self._others()
+        for role in SECTIONS:
+            if err:
+                break
+            plans[role], err = plan_files(self.lang, role,
+                                          [self._plain(r) for r in self.rows[role]], others)
         if err:
             return _error(self, self.lang, err)
         folder = None
         try:
             if self.inst is None:
-                files = {role: [(self._final(role, r), r["src"]) for r in self.rows[role]]
-                         for role in SECTIONS}
+                put = {role: [(label, src) for _, src, label, _ in ops] for role, ops in plans.items()}
                 folder = manage.add_test(
-                    self.root_dir, domain, name, reference, subdomain, files["test"],
-                    files["rating"], files["instructions"][0][1] if files["instructions"] else None,
-                    [src for _, src in files["norms"]])
+                    self.root_dir, domain, name, reference, subdomain, put["test"], put["rating"],
+                    put["instructions"][0][1] if put["instructions"] else None,
+                    [src for _, src in put["norms"]])
             else:
                 folder = manage.update_info(self.inst.folder, self.root_dir, name, reference,
                                             subdomain, domain)
-                self._save_files(folder)
+                self._apply(folder, plans)
         except AlreadyExists as e:
             if folder is None:  # nothing written yet: let the user fix the name
                 return _error(self, self.lang, self._t("err_exists", domain=domain))
@@ -486,24 +533,39 @@ class TestForm(tk.Toplevel):
             _error(self, self.lang, self._t("err_save", reason=self._t("err_name_invalid")))
         except OSError as e:
             _error(self, self.lang, self._t("err_save", reason=e))
-            if folder is None and self.inst is None:
-                return  # add_test cleaned up after itself
-        self.result = folder or (self.inst.folder if self.inst and self.inst.folder.is_dir()
-                                 else None)
+            if folder is None:
+                return  # nothing written (add_test cleans up after itself): keep the form
+        self.result = folder
         self.changed = True
         self.destroy()
 
-    def _save_files(self, folder: Path) -> None:
-        """Edit mode, after the info step (`folder` may have moved): relabel, replace, add."""
+    def _apply(self, folder: Path, plans: dict[str, list]) -> None:
+        """Edit mode, after the info step (`folder` may have moved). Relabelled files wait under
+        hidden temp names while files are put, so labels can swap and never meet a stale file."""
         moved = lambda p: folder / p.name
-        for role in SECTIONS:
-            rows = self.rows[role]
-            for r in rows:  # relabel first, so new files never meet a stale label
-                if r["path"] and not r["src"] and self._final(role, r) != r["current"]:
-                    manage.assign_role(moved(r["path"]), role, self._final(role, r))
-            for r in rows:
-                if r["src"]:
-                    dest = manage.put_file(folder, role, r["src"], self._final(role, r))
-                    old = r["path"] and moved(r["path"])
-                    if old and old != dest and old.exists():
-                        manage.remove_file(old)  # replaced under another name or label
+        parked = []  # (temp, role, label, original)
+        try:
+            for role, ops in plans.items():
+                for op in ops:
+                    if op[0] == "rename":
+                        tmp = folder / f".psyset-{uuid.uuid4().hex}{op[1].suffix}"
+                        os.rename(moved(op[1]), tmp)
+                        parked.append((tmp, role, op[2], moved(op[1])))
+            for role, ops in plans.items():
+                for op in ops:
+                    if op[0] == "put":
+                        _, src, label, old = op
+                        dest = manage.put_file(folder, role, src, label)
+                        if old and moved(old) != dest and moved(old).exists():
+                            manage.remove_file(moved(old))  # replaced under another name
+            while parked:
+                tmp, role, label, _ = parked[0]
+                manage.assign_role(tmp, role, label)
+                parked.pop(0)
+        finally:
+            for tmp, _, _, original in parked:  # a failure must not leave a file hidden
+                try:
+                    os.rename(tmp, original if not original.exists()
+                              else original.with_name("restored-" + original.name))
+                except OSError:
+                    pass
