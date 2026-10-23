@@ -57,7 +57,7 @@ Les quatre rôles sont reconnus d'après le nom du fichier :
 | `test` | feuille patient | `FEUILLE` |
 | `rating` | CRF | `CRF` |
 | `instructions` | consignes | `CONSIG.` |
-| `norms…`, `norm…` | normes (un ou plusieurs fichiers) | `NORMES` |
+| tout nom commençant par `norm` (`norms.pdf`, `norm-calcul.xlsx`…) | normes (un ou plusieurs fichiers) | `NORMES` |
 
 - **Versions** : `test-A.pdf` et `rating-A.pdf` vont ensemble (formes
   parallèles A/B, ou une feuille par sous-test). Un fichier sans étiquette
@@ -101,7 +101,7 @@ temporaires.
 
 Sur Mac avec Word, la première conversion déclenche une demande unique de
 macOS : **« PsySet souhaite contrôler Microsoft Word »**. Cliquez sur OK
-(PsySet vous prévient juste avant). Si un fichier ne peut pas être converti,
+(la première fois, PsySet vous prévient juste avant). Si un fichier ne peut pas être converti,
 la génération s'arrête en le nommant : jamais de PDF avec un trou silencieux.
 
 ## Utilisation

@@ -56,7 +56,7 @@ The four roles are recognised from the file name:
 | `test` | patient sheet | `SHEET` |
 | `rating` | CRF | `CRF` |
 | `instructions` | instructions | `INSTR` |
-| `norms…`, `norm…` | norms (one or several files) | `NORMS` |
+| anything starting with `norm` (`norms.pdf`, `norm-calculation.xlsx`…) | norms (one or several files) | `NORMS` |
 
 - **Versions**: `test-A.pdf` and `rating-A.pdf` belong together (parallel
   forms A/B, or one sheet per subtest). An unlabelled file (`test.pdf`) is
@@ -97,7 +97,7 @@ install if all your documents are already PDFs). Your original files are never
 modified: conversion works on temporary copies.
 
 On a Mac with Word, the first conversion triggers a one-time macOS prompt:
-**"PsySet wants to control Microsoft Word"**. Click OK (PsySet warns you just
+**"PsySet wants to control Microsoft Word"**. Click OK (the first time, PsySet warns you just
 before). If a file can't be converted, generation stops and names it: never a
 PDF with a silent gap.
 

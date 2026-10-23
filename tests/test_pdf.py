@@ -75,6 +75,18 @@ def test_merge_owner_password_pdf(tmp_path):
     assert widths(out) == [123, 123]
 
 
+def test_merge_owner_password_aes_pdf(tmp_path):
+    src = pdf(tmp_path / "plain.pdf", 2, width=123)
+    w = PdfWriter(clone_from=src)
+    w.encrypt(user_password="", owner_password="owner", algorithm="AES-256")
+    enc = tmp_path / "enc.pdf"
+    with enc.open("wb") as f:
+        w.write(f)
+    out = tmp_path / "out.pdf"
+    assert merge([enc], out, duplex=False) == 2
+    assert widths(out) == [123, 123]
+
+
 def test_merge_corrupt_pdf_names_file(tmp_path):
     bad = tmp_path / "bad.pdf"
     bad.write_bytes(b"garbage bytes, not a pdf")
