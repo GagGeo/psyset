@@ -8,3 +8,7 @@ build/
 dist/
 .pytest_cache/
 *.spec
+
+# design notes and maintainer tools, kept locally only
+docs/
+tools/
