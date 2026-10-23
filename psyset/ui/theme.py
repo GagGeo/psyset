@@ -145,6 +145,23 @@ def setup_styles(root: tk.Misc, fonts: Fonts) -> None:
                 font=(serif, 16, "italic"))
     s.configure("SessionSub.TLabel", background=C["preview_bg"], foreground=C["teal"],
                 font=(mono, 8, "bold"))
+    s.configure("SessionField.TLabel", background=C["preview_bg"], foreground=C["muted"],
+                font=(mono, 9, "bold"))
+    s.configure("SessionText.TLabel", background=C["preview_bg"], foreground=C["text"],
+                font=(sans, 12))
+    s.configure("SessionCount.TLabel", background=C["preview_bg"], foreground=C["muted"],
+                font=(sans, 11))
+    s.configure("SessionEmpty.TLabel", background=C["field"], foreground=C["muted"],
+                font=(serif, 12, "italic"))
+    s.configure("Session.TCheckbutton", background=C["preview_bg"], foreground=C["text"],
+                font=(sans, 12), indicatorbackground=C["field"],
+                indicatorforeground=C["bg"], padding=(0, 2))
+    s.map("Session.TCheckbutton", background=[("active", C["preview_bg"])],
+          indicatorbackground=[("selected", C["green"]), ("!selected", C["field"])],
+          indicatorforeground=[("selected", C["bg"])])
+    s.map("Accent.TButton", background=[("disabled", C["faint"]), ("active", C["green_hover"]),
+                                        ("pressed", C["green_hover"])],
+          foreground=[("disabled", C["field"])])
 
     # named fonts for the Tag chips (tk.Label: ttk cannot strike text through)
     for name, overstrike in (("PsyTag", False), ("PsyTagX", True)):

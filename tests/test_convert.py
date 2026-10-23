@@ -140,3 +140,19 @@ def test_to_pdf_converts_a_copy_never_the_original(tmp_path, monkeypatch):
     assert seen[0] != src and seen[0].name == src.name
     assert not seen[0].exists()  # private copy cleaned up
     assert src.read_bytes() == b"unsaved edits"
+
+
+def test_generate_unreadable_converted_pdf_names_the_original(tmp_path):
+    x = tmp_path / "rating.docx"
+    x.write_bytes(b"w")
+
+    def garbage(src, out_dir):
+        out = out_dir / f"{src.stem}.pdf"
+        out.write_bytes(b"not a pdf")
+        return out
+
+    a = tmp_path / "a.pdf"
+    with pytest.raises(PdfReadError) as e:
+        generate({a: [x]}, duplex=False, convert=garbage)
+    assert e.value.path == x
+    assert not a.exists()

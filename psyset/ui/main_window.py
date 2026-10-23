@@ -1,4 +1,4 @@
-"""Main screen: header, domains pane, tests pane (tags, detail box), session placeholder."""
+"""Main screen: header, domains pane, tests pane (tags, detail box), session pane."""
 import tkinter as tk
 from pathlib import Path
 from tkinter import messagebox, ttk
@@ -7,6 +7,7 @@ from psyset.config import save_config
 from psyset.i18n import t
 from psyset.library import Instrument, LibraryMissing, list_domains, scan_library
 from psyset.platform import asset_path, open_path, reveal_path
+from psyset.ui.session_pane import SessionPane
 from psyset.ui.theme import C, Fonts, Tag, setup_styles
 
 # role -> (string key, chip kind)
@@ -85,7 +86,7 @@ class MainWindow:
         self.body.rowconfigure(0, weight=1)
         for col, weight in enumerate((75, 150, 105)):
             self.body.columnconfigure(col, weight=weight, uniform="panes")
-        # Session pane placeholder (Task 9 mounts into session_area). Kept across rebuilds.
+        # Session pane area: kept across FR/EN rebuilds.
         box = tk.Frame(self.body, bg=C["preview_bg"], highlightbackground=C["preview_bd"],
                        highlightthickness=1)
         box.grid(row=0, column=2, sticky="nsew", padx=(18, 0))
@@ -100,6 +101,7 @@ class MainWindow:
 
         self._scan()
         self._build()
+        self.session = SessionPane(self.session_area, self)
 
     # ------------------------------------------------------------ library --
     def _key(self, inst: Instrument) -> str:
@@ -131,6 +133,7 @@ class MainWindow:
                 for f in self.tick_listeners:
                     f(inst, False)
         self._build()
+        self.session.refresh()
 
     # ---------------------------------------------------------------- ticks --
     def on_tick(self, inst: Instrument, ticked: bool) -> None:
@@ -423,10 +426,13 @@ class MainWindow:
             w = self.root.winfo_containing(e.x_root, e.y_root)
         except (KeyError, tk.TclError):  # e.g. a Combobox popdown: no Python widget
             return
-        c = str(self.canvas)
-        if w is None or not pixels or not (str(w) == c or str(w).startswith(c + ".")):
+        if w is None or not pixels:
             return
-        self.canvas.yview_scroll(int(pixels) or (1 if pixels > 0 else -1), "units")
+        for canvas in (self.canvas, self.session.canvas):
+            c = str(canvas)
+            if str(w) == c or str(w).startswith(c + "."):
+                canvas.yview_scroll(int(pixels) or (1 if pixels > 0 else -1), "units")
+                return
 
     def _on_wheel(self, e) -> None:
         n = wheel_notches(e.delta, self.root.tk.call("tk", "windowingsystem"), tk.TkVersion)

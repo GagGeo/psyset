@@ -6,7 +6,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from .pdf import merge
+from .pdf import PdfReadError, merge
 
 TIMEOUT = 120  # seconds per file; a converter stuck on a dialog fails instead of hanging
 
@@ -177,6 +177,7 @@ def generate(jobs: dict[Path, list[Path]], duplex: bool, convert=to_pdf) -> dict
                         out_dir = Path(tmp) / str(len(converted))
                         out_dir.mkdir()
                         converted[doc] = convert(doc, out_dir)
+            source_of = {pdf: doc for doc, pdf in converted.items()}
             pages: dict[Path, int] = {}
             tmp_of: dict[Path, Path] = {}
             for dest, docs in jobs.items():
@@ -186,6 +187,10 @@ def generate(jobs: dict[Path, list[Path]], duplex: bool, convert=to_pdf) -> dict
                     temps.append(Path(name))
                     tmp_of[dest] = Path(name)
                     pages[dest] = merge([converted.get(d, d) for d in docs], Path(name), duplex)
+                except PdfReadError as e:  # name the user's document, not our temp PDF
+                    if e.path in source_of:
+                        raise PdfReadError(source_of[e.path], e.reason) from e
+                    raise
                 except OSError as e:
                     raise OutputError(dest, str(e)) from e
         for dest, name in tmp_of.items():
