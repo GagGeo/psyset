@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100" aria-label="PsySet">
+  <rect width="100" height="100" rx="26" fill="#2D5249"/>
+  <rect x="20" y="14" width="13" height="20" rx="3" fill="#4F8B7A"/>
+  <rect x="36" y="14" width="13" height="20" rx="3" fill="#C97B5C"/>
+  <rect x="52" y="14" width="13" height="20" rx="3" fill="#E9E1D2"/>
+  <rect x="68" y="14" width="13" height="20" rx="3" fill="#D5A24D"/>
+  <rect x="18" y="32" width="64" height="48" rx="7" fill="#F4EFE6"/>
+  <rect x="28" y="44" width="34" height="5" rx="2.5" fill="#2D5249" opacity=".45"/>
+  <rect x="28" y="55" width="26" height="5" rx="2.5" fill="#2D5249" opacity=".3"/>
+  <rect x="28" y="66" width="30" height="5" rx="2.5" fill="#2D5249" opacity=".3"/>
+</svg>

@@ -2,3 +2,13 @@
 .superpowers/
 # real test materials (copyrighted) — local fixtures only
 example/
+.venv/
+__pycache__/
+build/
+dist/
+.pytest_cache/
+*.spec
+
+# design notes and maintainer tools, kept locally only
+docs/
+tools/
