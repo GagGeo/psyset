@@ -119,6 +119,12 @@ def setup_styles(root: tk.Misc, fonts: Fonts) -> None:
                 font=(mono, 9, "bold"))
     s.configure("Empty.TLabel", background=C["panel"], foreground=C["muted"],
                 font=(serif, 12, "italic"))
+    # dialogs (Task 10): file rows inside panels, the assign-role radio buttons
+    s.configure("Panel.TLabel", background=C["panel"], foreground=C["text"], font=(sans, 12))
+    s.configure("TRadiobutton", background=C["bg"], foreground=C["text"], font=(sans, 12),
+                indicatorbackground=C["field"], padding=(2, 3))
+    s.map("TRadiobutton", background=[("active", C["bg"])],
+          indicatorbackground=[("selected", C["green"]), ("!selected", C["field"])])
     # test rows: a ticked row is lifted onto the field colour
     for name, bg in (("Row", C["panel"]), ("RowOn", C["field"])):
         s.configure(f"{name}.TCheckbutton", background=bg, indicatorbackground=C["field"],

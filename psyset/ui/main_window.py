@@ -7,6 +7,7 @@ from psyset.config import save_config
 from psyset.i18n import t
 from psyset.library import Instrument, LibraryMissing, list_domains, scan_library
 from psyset.platform import asset_path, open_path, reveal_path
+from psyset.ui import dialogs
 from psyset.ui.session_pane import SessionPane
 from psyset.ui.theme import C, Fonts, Tag, setup_styles
 
@@ -194,7 +195,30 @@ class MainWindow:
             ttk.Button(langs, text=code.upper(), width=3,
                        style="LangActive.TButton" if self.lang == code else "Lang.TButton",
                        command=lambda c=code: self.set_lang(c)).pack(side="left", padx=(0, 3))
+        gear = ttk.Button(langs, text="⚙", width=3, style="Lang.TButton")
+        gear.configure(command=lambda: self._settings_menu(gear))
+        gear.pack(side="left", padx=(6, 0))
         return h
+
+    def _settings_menu(self, button) -> None:
+        menu = tk.Menu(self.root, tearoff=0)
+        menu.add_command(label=self._t("settings_change_lib"), command=self.change_library)
+        menu.add_command(label=self._t("settings_open_lib"),
+                         command=lambda: self._os_open(open_path, self.library))
+        try:
+            menu.tk_popup(button.winfo_rootx(), button.winfo_rooty() + button.winfo_height())
+        finally:
+            menu.grab_release()
+
+    def change_library(self) -> None:
+        if not dialogs.first_launch(self.root, self.cfg, change=True):
+            return
+        for inst in list(self.ticked):  # keys are relative to the old library: empty the session
+            self.on_tick(inst, False)
+        self.library = Path(self.cfg["library"])
+        self.domain = self.detail_key = None
+        self.reload()
+        self.set_lang(self.cfg["lang"])
 
     def _build_footer(self):
         f = ttk.Label(self.main, text=self._t("footer"), style="Note.TLabel")
@@ -419,6 +443,8 @@ class MainWindow:
                    command=lambda: self.edit_info(inst)).pack(side="left", padx=(0, 6))
         ttk.Button(btns, text=self._t("open_folder"), style="Small.TButton",
                    command=lambda: self._os_open(reveal_path, inst.folder)).pack(side="left")
+        ttk.Button(btns, text=self._t("remove_test"), style="Small.TButton",
+                   command=lambda: self.remove_test(inst)).pack(side="left", padx=(6, 0))
 
     # ---------------------------------------------------------- scrolling --
     def _scroll_list(self, e, pixels: float) -> None:
@@ -442,12 +468,33 @@ class MainWindow:
         _dx, dy = self.root.tk.call("tk::PreciseScrollDeltas", e.delta)
         self._scroll_list(e, -dy)
 
-    # ------------------------------------------------- dialogs (Task 10) --
+    # -------------------------------------------------------------- dialogs --
     def add_test(self) -> None:
-        """Stub: Task 10 opens the add-test form."""
+        self._run_form(None)
 
     def edit_info(self, inst: Instrument) -> None:
-        """Stub: Task 10 opens the test form pre-filled."""
+        self._run_form(inst)
+
+    def _run_form(self, inst: Instrument | None) -> None:
+        form = dialogs.TestForm(self.root, self.library, self.lang, inst, domain=self.domain)
+        self.root.wait_window(form)
+        if inst and form.result and form.result != inst.folder:
+            old = inst.folder
+            for i in self.ticked:  # renamed or moved: keep its place in the session
+                if i.folder == old:
+                    i.folder = form.result
+        if form.changed:
+            self.reload()
+        if form.result:
+            self.detail_key = form.result.relative_to(self.library).as_posix()
+            self.select_domain(form.result.parent.name)
+            self._render_detail()
 
     def assign_role(self, inst: Instrument, path: Path) -> None:
-        """Stub: Task 10 opens the assign-role dialog."""
+        if dialogs.assign_file_role(self.root, self.lang, path):
+            self.reload()
+
+    def remove_test(self, inst: Instrument) -> None:
+        if dialogs.remove_test(self.root, self.lang, inst):
+            self.detail_key = None
+            self.reload()
